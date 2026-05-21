@@ -956,7 +956,7 @@ ${text ? `Descripción: ${text}` : 'Analiza la imagen adjunta.'}`;
     const parts = [];
     if (selectedImage) parts.push({ inline_data:{ mime_type:selectedImage.mimeType, data:selectedImage.base64 } });
     parts.push({ text:PROMPT });
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:runContent?key=${apiKey}`,{
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ contents:[{ parts }] })
     });
@@ -1014,7 +1014,7 @@ function startBarcodeFlow() {
           { inline_data:{ mime_type:file.type, data:ev.target.result.split(',')[1] } },
           { text:'Lee el código de barras EAN/UPC de esta imagen y devuelve SOLO el número, sin texto adicional. Si no hay código de barras visible, devuelve "none".' }
         ];
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:runContent?key=${apiKey}`,{
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,{
           method:'POST', headers:{'Content-Type':'application/json'},
           body:JSON.stringify({ contents:[{ parts }] })
         });
@@ -1187,7 +1187,7 @@ Devuelve SOLO JSON válido sin texto extra:
 {"nombre":"Nombre receta","porciones":2,"ingredientes":[{"nombre":"Ingrediente","gramos":100,"cal100":165,"p100":31,"c100":0,"f100":4}]}
 Receta solicitada: ${prompt}`;
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:runContent?key=${apiKey}`,{
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ contents:[{ parts:[{text:PROMPT}] }] })
     });
@@ -1519,6 +1519,16 @@ function closeOnboarding() {
 
 // ─── INIT ───
 (function(){
+  // Detect file:// — Gemini API blocked by CORS
+  if (location.protocol === 'file:') {
+    const b = document.createElement('div');
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999;background:#1a0a00;border-bottom:2px solid #ffa502;padding:10px 16px;font-size:12px;color:#ffa502;line-height:1.8;font-family:monospace';
+    b.innerHTML = '<b>⚠️ La IA requiere servidor local.</b> Abre una terminal en esta carpeta y ejecuta:<br>' +
+      '<span style="color:#00ff9d">python -m http.server 8080</span>' +
+      '&nbsp; luego abre &nbsp;<span style="color:#00d4ff">http://localhost:8080/nutritrack.html</span>' +
+      '<span style="float:right;cursor:pointer;font-size:18px;line-height:1" onclick="this.parentElement.remove()">✕</span>';
+    document.body.prepend(b);
+  }
   if (!S.getProfile()) document.getElementById('onboarding').style.display='flex';
   else document.getElementById('onboarding').style.display='none';
   // Init library if first time
