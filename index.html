@@ -956,7 +956,7 @@ ${text ? `Descripción: ${text}` : 'Analiza la imagen adjunta.'}`;
     const parts = [];
     if (selectedImage) parts.push({ inline_data:{ mime_type:selectedImage.mimeType, data:selectedImage.base64 } });
     parts.push({ text:PROMPT });
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,{
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${window._workingModel || "gemini-2.0-flash-exp"}:generateContent?key=${apiKey}`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ contents:[{ parts }] })
     });
@@ -1014,7 +1014,7 @@ function startBarcodeFlow() {
           { inline_data:{ mime_type:file.type, data:ev.target.result.split(',')[1] } },
           { text:'Lee el código de barras EAN/UPC de esta imagen y devuelve SOLO el número, sin texto adicional. Si no hay código de barras visible, devuelve "none".' }
         ];
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,{
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${window._workingModel || "gemini-2.0-flash-exp"}:generateContent?key=${apiKey}`,{
           method:'POST', headers:{'Content-Type':'application/json'},
           body:JSON.stringify({ contents:[{ parts }] })
         });
@@ -1187,7 +1187,7 @@ Devuelve SOLO JSON válido sin texto extra:
 {"nombre":"Nombre receta","porciones":2,"ingredientes":[{"nombre":"Ingrediente","gramos":100,"cal100":165,"p100":31,"c100":0,"f100":4}]}
 Receta solicitada: ${prompt}`;
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,{
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${window._workingModel || "gemini-2.0-flash-exp"}:generateContent?key=${apiKey}`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ contents:[{ parts:[{text:PROMPT}] }] })
     });
@@ -1485,6 +1485,54 @@ function saveSettings() {
   showToast('¡Perfil guardado! 💪','success');
   renderDashboard();
 }
+async function testApiKey() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  const resultEl = document.getElementById('apiTestResult');
+  resultEl.style.display = 'block';
+  if (!key) { resultEl.style.color='var(--warn)'; resultEl.textContent = '⚠️ Primero ingresa tu API Key arriba.'; return; }
+  resultEl.style.color = 'var(--text-dim)';
+  resultEl.textContent = '⏳ Probando conexión con Gemini...';
+  const MODELS = [
+    'gemini-2.0-flash-exp',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-latest',
+    'gemini-pro',
+  ];
+  let lastError = '';
+  for (const model of MODELS) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+      resultEl.textContent = `⏳ Probando modelo: ${model}...`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: 'Responde solo: OK' }] }] })
+      });
+      const data = await res.json();
+      if (data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+        resultEl.style.color = 'var(--accent2)';
+        resultEl.innerHTML = `✅ <b>Funciona con modelo: ${model}</b><br>Respuesta: ${data.candidates[0].content.parts[0].text}`;
+        // Auto-save working model
+        window._workingModel = model;
+        S.setApiKey(key);
+        showToast('¡API Key válida! Modelo: ' + model, 'success');
+        return;
+      } else {
+        lastError = `${model}: ${JSON.stringify(data?.error || data).slice(0,120)}`;
+      }
+    } catch(err) {
+      lastError = `${model}: ${err.message}`;
+    }
+  }
+  resultEl.style.color = 'var(--danger)';
+  resultEl.innerHTML = `❌ <b>Todos los modelos fallaron.</b><br><br>Último error:<br>${lastError}<br><br>
+    <b>Posibles causas:</b><br>
+    • La API Key es incorrecta o fue revocada<br>
+    • La key tiene restricciones de dominio (verifica en Google Cloud Console)<br>
+    • Gemini API no está habilitada para este proyecto<br><br>
+    <b>Solución:</b> Ve a <span style="color:var(--accent)">aistudio.google.com/app/apikey</span>, crea una key nueva SIN restricciones y pégala aquí.`;
+}
+
 function toggleApiKey() {
   const i=document.getElementById('apiKeyInput');
   i.type=i.type==='password'?'text':'password';
