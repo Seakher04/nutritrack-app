@@ -496,7 +496,33 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
             <input class="form-control" id="apiKeyInput" type="password" placeholder="AIzaSy…" style="flex:1">
             <button class="btn-icon" onclick="toggleApiKey()" style="flex-shrink:0">👁</button>
           </div>
-          <div class="api-hint">Obtén tu clave gratuita en <span style="color:var(--accent)">aistudio.google.com</span></div>
+          <div class="api-hint">Obtén tu clave gratuita en <span style="color:var(--accent)">aistudio.google.com</span> · Solo necesaria para analizar <b>fotos</b></div>
+        </div>
+
+        <!-- Groq API Key -->
+        <div class="stat-block" style="margin-bottom:10px">
+          <div style="font-size:9px;color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:6px">
+            API Key Groq <span class="tag-badge" style="background:rgba(0,255,157,0.15);border-color:rgba(0,255,157,0.4);color:var(--accent2)">RECOMENDADO</span>
+          </div>
+          <div style="display:flex;gap:7px">
+            <input class="form-control" id="groqKeyInput" type="password" placeholder="gsk_…" style="flex:1">
+            <button class="btn-icon" onclick="toggleGroqKey()" style="flex-shrink:0">👁</button>
+          </div>
+          <div class="api-hint">
+            Gratis en <span style="color:var(--accent2)">console.groq.com</span> · 14,400 requests/día · Sin CORS · Más rápido<br>
+            Úsalo para <b>texto</b>. Para <b>fotos</b> también necesitas Gemini.
+          </div>
+          <button onclick="testGroqKey()" style="margin-top:8px;width:100%;background:rgba(0,255,157,0.1);border:1px solid rgba(0,255,157,0.4);border-radius:8px;padding:9px;font-family:var(--font-head);font-size:12px;font-weight:700;color:var(--accent2);cursor:pointer">🔬 Probar Groq Key</button>
+          <div id="groqTestResult" style="display:none;margin-top:8px;font-size:11px;line-height:1.7;background:var(--bg-deep);border-radius:8px;padding:10px;word-break:break-all;border:1px solid var(--border)"></div>
+        </div>
+
+        <div class="stat-block" style="margin-bottom:10px">
+          <div style="font-size:9px;color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:6px">API Key Gemini <span class="tag-badge">OPCIONAL</span></div>
+          <div style="display:flex;gap:7px">
+            <input class="form-control" id="apiKeyInput" type="password" placeholder="AIzaSy…" style="flex:1">
+            <button class="btn-icon" onclick="toggleApiKey()" style="flex-shrink:0">👁</button>
+          </div>
+          <div class="api-hint">Obtén tu clave gratuita en <span style="color:var(--accent)">aistudio.google.com</span> · Solo necesaria para analizar <b>fotos</b></div>
           <button onclick="testApiKey()" style="margin-top:8px;width:100%;background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.4);border-radius:8px;padding:10px;font-family:var(--font-head);font-size:12px;font-weight:700;color:var(--accent);cursor:pointer">🔬 Probar API Key</button>
           <div id="apiTestResult" style="display:none;margin-top:8px;font-size:11px;line-height:1.7;background:var(--bg-deep);border-radius:8px;padding:10px;word-break:break-all;border:1px solid var(--border)"></div>
         </div>
@@ -601,6 +627,8 @@ const S = {
   setRecipes: v  => S.set('nt_recipes', v),
   getApiKey:  () => localStorage.getItem('nt_apikey') || '',
   setApiKey:  v  => localStorage.setItem('nt_apikey', v),
+  getGroqKey: () => localStorage.getItem('nt_groqkey') || '',
+  setGroqKey: v  => localStorage.setItem('nt_groqkey', v),
   getGoal:    () => S.get('nt_goal'),
   setGoal:    v  => S.set('nt_goal', v),
   getWeights: () => S.get('nt_weights') || [],
@@ -934,71 +962,121 @@ function clearImage() {
 async function analyzeFood() {
   const text = document.getElementById('foodInput').value.trim();
   if (!text && !selectedImage) { showToast('Describe un alimento o sube una foto','warn'); return; }
-  const apiKey = S.getApiKey();
-  if (!apiKey) { showToast('Configura tu API Key de Gemini en Ajustes','error'); return; }
+
+  const groqKey   = S.getGroqKey();
+  const geminiKey = S.getApiKey();
+  const hasImage  = !!selectedImage;
+
+  // Decision: use Groq for text (faster, no CORS issues), Gemini for images
+  if (hasImage && !geminiKey) { showToast('Para analizar fotos necesitas la API Key de Gemini en Ajustes','error'); return; }
+  if (!hasImage && !groqKey && !geminiKey) { showToast('Configura al menos una API Key en Ajustes','error'); return; }
+
   const btn = document.getElementById('analyzeBtn');
-  btn.disabled=true;
-  btn.innerHTML=`<div class="loading-dots"><span></span><span></span><span></span></div>`;
-
-  // Build context from personal library (custom items)
-  const lib = S.getLib();
-  const customItems = lib.filter(i=>i.custom).slice(0,15);
-  const libContext = customItems.length
-    ? `\n\nBiblioteca personal del usuario (prioriza estos si coinciden):\n${customItems.map(i=>`- ${i.name}: ${i.calorias}kcal P:${i.proteinas}g C:${i.carbohidratos}g G:${i.grasas}g (por 100g)`).join('\n')}`
-    : '';
-
-  const PROMPT = `Eres un nutricionista experto. Analiza el alimento/plato y devuelve ÚNICAMENTE JSON válido sin texto extra ni bloques de código.
-Formato exacto: {"alimento":"Nombre","calorias":250,"proteinas":20,"carbohidratos":30,"grasas":8,"matchedLibrary":false}
-- Todos los valores son números enteros. Estima porciones realistas para una persona.
-- Si el alimento coincide con alguno de la biblioteca personal, usa esos valores y pon matchedLibrary:true.
-- Si hay múltiples alimentos, suma macros en un solo JSON.${libContext}
-${text ? `Descripción: ${text}` : 'Analiza la imagen adjunta.'}`;
+  btn.disabled = true;
+  btn.innerHTML = '<div class="loading-dots"><span></span><span></span><span></span></div>';
 
   try {
-    const parts = [];
-    if (selectedImage) parts.push({ inline_data:{ mime_type:selectedImage.mimeType, data:selectedImage.base64 } });
-    parts.push({ text:PROMPT });
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${window._workingModel || "gemini-1.5-flash"}:generateContent?key=${apiKey}`,{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ contents:[{ parts }] })
-    });
-    if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e?.error?.message||`HTTP ${res.status}`); }
-    const data = await res.json();
-    const raw  = data?.candidates?.[0]?.content?.parts?.[0]?.text||'';
-    const m = raw.match(/\{[\s\S]*\}/);
-    if (!m) throw new Error('La IA no devolvió JSON válido');
-    const food = JSON.parse(m[0]);
-    if (!food.alimento||food.calorias===undefined) throw new Error('Respuesta incompleta');
+    let food;
+    if (hasImage) {
+      food = await analyzeWithGemini(text, geminiKey);
+    } else if (groqKey) {
+      food = await analyzeWithGroq(text, groqKey);
+    } else {
+      food = await analyzeWithGemini(text, geminiKey);
+    }
     pendingFood = food;
-    document.getElementById('aiResultName').textContent = food.alimento;
-    document.getElementById('aiCal').textContent  = food.calorias;
-    document.getElementById('aiPro').textContent  = `${food.proteinas||0}g`;
-    document.getElementById('aiCarb').textContent = `${food.carbohidratos||0}g`;
-    document.getElementById('aiFat').textContent  = `${food.grasas||0}g`;
+    document.getElementById('aiResultName').textContent  = food.alimento;
+    document.getElementById('aiCal').textContent         = food.calorias;
+    document.getElementById('aiPro').textContent         = (food.proteinas||0)+'g';
+    document.getElementById('aiCarb').textContent        = (food.carbohidratos||0)+'g';
+    document.getElementById('aiFat').textContent         = (food.grasas||0)+'g';
     const matchNote = document.getElementById('aiMatchNote');
     if (food.matchedLibrary) { matchNote.textContent='✓ Datos de tu biblioteca personal'; matchNote.style.display='block'; }
     else matchNote.style.display='none';
     document.getElementById('aiResult').classList.add('visible');
     showToast('¡Análisis listo! ✨','success');
   } catch(err) {
-    console.error(err);
-    showToast(`Error: ${err.message.slice(0,60)}`,'error');
+    showToast('Error: ' + err.message.slice(0,70), 'error');
   } finally {
-    btn.disabled=false;
-    btn.innerHTML=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> Analizar con IA`;
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> Analizar con IA';
   }
 }
-function confirmAddFood() {
-  if (!pendingFood) return;
-  addFoodEntry({ name:pendingFood.alimento, calorias:Number(pendingFood.calorias)||0, proteinas:Number(pendingFood.proteinas)||0, carbohidratos:Number(pendingFood.carbohidratos)||0, grasas:Number(pendingFood.grasas)||0 });
-  pendingFood=null;
-  document.getElementById('aiResult').classList.remove('visible');
-  document.getElementById('foodInput').value='';
-  clearImage();
-  showPage('home');
-  showToast('¡Alimento registrado! 🎯','success');
+
+// ─── GROQ ANALYSIS (text only, fast, reliable) ───
+async function analyzeWithGroq(text, key) {
+  const lib = S.getLib();
+  const custom = lib.filter(i=>i.custom).slice(0,15);
+  const libCtx = custom.length
+    ? '\n\nBiblioteca personal del usuario (usa estos datos si coinciden):\n' + custom.map(i=>`- ${i.name}: ${i.calorias}kcal P:${i.proteinas}g C:${i.carbohidratos}g G:${i.grasas}g`).join('\n')
+    : '';
+  const PROMPT = `Eres un nutricionista experto. Analiza el alimento descrito y devuelve ÚNICAMENTE JSON válido sin texto extra ni bloques de código.
+Formato exacto: {"alimento":"Nombre","calorias":250,"proteinas":20,"carbohidratos":30,"grasas":8,"matchedLibrary":false}
+Todos los valores son números enteros. Estima porciones realistas para una persona. Si coincide con la biblioteca personal usa esos datos y pon matchedLibrary:true.${libCtx}
+Alimento: ${text}`;
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: PROMPT }],
+      temperature: 0.3,
+      max_tokens: 200,
+    })
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(()=>({}));
+    throw new Error(e?.error?.message || 'Groq error ' + res.status);
+  }
+  const data = await res.json();
+  const raw = data?.choices?.[0]?.message?.content || '';
+  const m = raw.match(/\{[\s\S]*\}/);
+  if (!m) throw new Error('La IA no devolvió JSON válido');
+  const food = JSON.parse(m[0]);
+  if (!food.alimento || food.calorias === undefined) throw new Error('Respuesta incompleta');
+  return food;
 }
 
+// ─── GEMINI ANALYSIS (text + images) ───
+async function analyzeWithGemini(text, key) {
+  const lib = S.getLib();
+  const custom = lib.filter(i=>i.custom).slice(0,15);
+  const libCtx = custom.length
+    ? '\n\nBiblioteca personal del usuario (prioriza estos si coinciden):\n' + custom.map(i=>`- ${i.name}: ${i.calorias}kcal P:${i.proteinas}g C:${i.carbohidratos}g G:${i.grasas}g`).join('\n')
+    : '';
+  const PROMPT = `Eres un nutricionista experto. Analiza el alimento/plato y devuelve ÚNICAMENTE JSON válido sin texto extra.
+Formato: {"alimento":"Nombre","calorias":250,"proteinas":20,"carbohidratos":30,"grasas":8,"matchedLibrary":false}
+Todos los valores son números enteros.${libCtx}
+${text ? 'Descripción: ' + text : 'Analiza la imagen adjunta.'}`;
+
+  const parts = [];
+  if (selectedImage) parts.push({ inline_data: { mime_type: selectedImage.mimeType, data: selectedImage.base64 } });
+  parts.push({ text: PROMPT });
+
+  const res = await fetch('https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=' + key, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts }] })
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(()=>({}));
+    const code = e?.error?.code || res.status;
+    if (code === 429) throw new Error('Cuota de Gemini agotada por hoy. Usa descripción de texto con Groq.');
+    if (code === 403) throw new Error('API Key de Gemini con restricciones. Revisa Google Cloud Console.');
+    throw new Error(e?.error?.message || 'Gemini error ' + res.status);
+  }
+  const data = await res.json();
+  const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const m = raw.match(/\{[\s\S]*\}/);
+  if (!m) throw new Error('Gemini no devolvió JSON válido');
+  const food = JSON.parse(m[0]);
+  if (!food.alimento || food.calorias === undefined) throw new Error('Respuesta incompleta');
+  return food;
+}
+
+
+// ─── BARCODE
 // ─── BARCODE ───
 function startBarcodeFlow() {
   // Use camera capture + manual fallback (no native barcode API needed)
@@ -1016,7 +1094,7 @@ function startBarcodeFlow() {
           { inline_data:{ mime_type:file.type, data:ev.target.result.split(',')[1] } },
           { text:'Lee el código de barras EAN/UPC de esta imagen y devuelve SOLO el número, sin texto adicional. Si no hay código de barras visible, devuelve "none".' }
         ];
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${window._workingModel || "gemini-1.5-flash"}:generateContent?key=${apiKey}`,{
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,{
           method:'POST', headers:{'Content-Type':'application/json'},
           body:JSON.stringify({ contents:[{ parts }] })
         });
@@ -1189,7 +1267,7 @@ Devuelve SOLO JSON válido sin texto extra:
 {"nombre":"Nombre receta","porciones":2,"ingredientes":[{"nombre":"Ingrediente","gramos":100,"cal100":165,"p100":31,"c100":0,"f100":4}]}
 Receta solicitada: ${prompt}`;
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${window._workingModel || "gemini-1.5-flash"}:generateContent?key=${apiKey}`,{
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ contents:[{ parts:[{text:PROMPT}] }] })
     });
@@ -1461,6 +1539,8 @@ function loadSettingsForm() {
   }
   const key = S.getApiKey();
   if (key) document.getElementById('apiKeyInput').value=key;
+  const gk = S.getGroqKey();
+  if (gk && document.getElementById('groqKeyInput')) document.getElementById('groqKeyInput').value=gk;
 }
 function saveSettings() {
   const age=parseFloat(document.getElementById('settAge').value);
@@ -1477,6 +1557,8 @@ function saveSettings() {
   const protein=Math.round(weight*2), fat=Math.round((targetCal*0.25)/9), carbs=Math.round((targetCal-protein*4-fat*9)/4);
   S.set('nt_profile',{ age, gender, weight, height, activity, goal, calories:targetCal, protein, carbs, fat, bmr:Math.round(bmr), tdee });
   if (apiKey) S.setApiKey(apiKey);
+  const groqKey = document.getElementById('groqKeyInput')?.value?.trim();
+  if (groqKey) S.setGroqKey(groqKey);
   document.getElementById('tdeeTMB').textContent=`${Math.round(bmr)} kcal`;
   document.getElementById('tdeeTDEE').textContent=`${tdee} kcal`;
   document.getElementById('tdeeGoal').textContent=`${targetCal} kcal`;
@@ -1487,53 +1569,87 @@ function saveSettings() {
   showToast('¡Perfil guardado! 💪','success');
   renderDashboard();
 }
+function toggleGroqKey() {
+  const i = document.getElementById('groqKeyInput');
+  i.type = i.type === 'password' ? 'text' : 'password';
+}
+
+async function testGroqKey() {
+  const key = document.getElementById('groqKeyInput').value.trim();
+  const el  = document.getElementById('groqTestResult');
+  el.style.display = 'block';
+  if (!key) { el.style.color='var(--warn)'; el.textContent='⚠️ Primero pega tu Groq Key arriba.'; return; }
+  el.style.color = 'var(--text-dim)';
+  el.textContent = '⏳ Conectando con Groq...';
+  try {
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+      body: JSON.stringify({ model:'llama-3.3-70b-versatile', messages:[{role:'user',content:'Responde solo: OK'}], max_tokens:5 })
+    });
+    const d = await r.json();
+    if (r.ok && d?.choices?.[0]?.message?.content) {
+      el.style.color = 'var(--accent2)';
+      el.innerHTML = '✅ <b>¡Groq funciona perfectamente!</b><br>Modelo: llama-3.3-70b-versatile<br>14,400 requests/día gratis';
+      S.setGroqKey(key);
+      showToast('¡Groq Key válida! ✓', 'success');
+    } else {
+      const msg = d?.error?.message || JSON.stringify(d).slice(0,150);
+      el.style.color = 'var(--danger)';
+      el.innerHTML = '❌ Error: ' + msg + '<br>Obtén tu key gratuita en <span style="color:var(--accent2)">console.groq.com</span>';
+    }
+  } catch(e) {
+    el.style.color = 'var(--danger)';
+    el.innerHTML = '❌ Error de red: ' + e.message;
+  }
+}
+
 async function testApiKey() {
   const key = document.getElementById('apiKeyInput').value.trim();
-  const resultEl = document.getElementById('apiTestResult');
-  resultEl.style.display = 'block';
-  if (!key) { resultEl.style.color='var(--warn)'; resultEl.textContent = '⚠️ Primero ingresa tu API Key arriba.'; return; }
-  resultEl.style.color = 'var(--text-dim)';
-  resultEl.textContent = '⏳ Probando conexión con Gemini...';
-  const MODELS = [
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-latest',
-    'gemini-1.5-pro',
-    'gemini-2.0-flash',
-  ];
-  let lastError = '';
-  for (const model of MODELS) {
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-      resultEl.textContent = `⏳ Probando modelo: ${model}...`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: 'Responde solo: OK' }] }] })
-      });
-      const data = await res.json();
-      if (data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        resultEl.style.color = 'var(--accent2)';
-        resultEl.innerHTML = `✅ <b>Funciona con modelo: ${model}</b><br>Respuesta: ${data.candidates[0].content.parts[0].text}`;
-        // Auto-save working model
-        window._workingModel = model;
-        S.setApiKey(key);
-        showToast('¡API Key válida! Modelo: ' + model, 'success');
-        return;
-      } else {
-        lastError = `${model}: ${JSON.stringify(data?.error || data).slice(0,120)}`;
-      }
-    } catch(err) {
-      lastError = `${model}: ${err.message}`;
-    }
+  const el = document.getElementById('apiTestResult');
+  el.style.display = 'block';
+  if (!key) {
+    el.style.color = 'var(--warn)';
+    el.textContent = '⚠️ Primero pega tu API Key en el campo de arriba.';
+    return;
   }
-  resultEl.style.color = 'var(--danger)';
-  resultEl.innerHTML = `❌ <b>Todos los modelos fallaron.</b><br><br>Último error:<br>${lastError}<br><br>
-    <b>Posibles causas:</b><br>
-    • La API Key es incorrecta o fue revocada<br>
-    • La key tiene restricciones de dominio (verifica en Google Cloud Console)<br>
-    • Gemini API no está habilitada para este proyecto<br><br>
-    <b>Solución:</b> Ve a <span style="color:var(--accent)">aistudio.google.com/app/apikey</span>, crea una key nueva SIN restricciones y pégala aquí.`;
+  el.style.color = 'var(--text-dim)';
+  el.textContent = '⏳ Conectando con Gemini...';
+  const URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=' + key;
+  try {
+    const r = await fetch(URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: 'Responde solo la palabra: OK' }] }] })
+    });
+    const d = await r.json();
+    if (r.ok && d?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      el.style.color = 'var(--accent2)';
+      el.innerHTML = '✅ <b>¡API Key funciona correctamente!</b><br>Modelo: gemini-1.5-flash<br>Respuesta: ' + d.candidates[0].content.parts[0].text;
+      window._workingModel = 'gemini-1.5-flash';
+      S.setApiKey(key);
+      showToast('¡API Key válida! ✓', 'success');
+    } else {
+      const code = d?.error?.code || r.status;
+      const msg  = d?.error?.message || JSON.stringify(d).slice(0, 200);
+      el.style.color = 'var(--danger)';
+      if (code === 400) {
+        el.innerHTML = '❌ <b>API Key inválida (400)</b><br>La key no existe o está mal copiada.<br>Copia la key completa desde <span style="color:var(--accent)">aistudio.google.com/app/apikey</span>';
+      } else if (code === 403) {
+        el.innerHTML = '❌ <b>Sin permiso (403)</b><br>La key tiene restricciones de dominio.<br><b>Solución:</b> Ve a <span style="color:var(--accent)">console.cloud.google.com/apis/credentials</span> → edita la key → en "Restricciones de aplicación" selecciona <b>Ninguna</b> → Guardar.';
+      } else if (code === 429) {
+        el.innerHTML = '⚠️ <b>Límite alcanzado (429)</b><br>La key SÍ funciona pero agotaste la cuota gratuita del día.<br>Espera unos minutos o crea un nuevo proyecto en AI Studio.';
+        el.style.color = 'var(--warn)';
+      } else {
+        el.innerHTML = '❌ <b>Error ' + code + '</b><br>' + msg;
+      }
+    }
+  } catch(e) {
+    el.style.color = 'var(--danger)';
+    el.innerHTML = '❌ <b>Error de red: ' + e.message + '</b><br>Esto puede ser un bloqueo de CORS o falta de conexión.<br>Intenta recargar la página y volver a probar.';
+  }
 }
+
 
 function toggleApiKey() {
   const i=document.getElementById('apiKeyInput');
