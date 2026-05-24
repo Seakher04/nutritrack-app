@@ -580,7 +580,10 @@ function bumpLib(name){
 }
 
 // ── GEMINI ──
-const GURL=key=>`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+// Model is detected automatically by testKey() and stored
+let WORKING_MODEL = localStorage.getItem('nt_model') || 'gemini-1.5-flash';
+const MODELS_TO_TRY = ['gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash','gemini-1.5-flash-latest','gemini-1.5-pro','gemini-pro'];
+const GURL=key=>`https://generativelanguage.googleapis.com/v1beta/models/${WORKING_MODEL}:generateContent?key=${key}`;
 
 async function callGemini(parts,key){
   const res=await fetch(GURL(key),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts}]})});
@@ -1197,18 +1200,32 @@ async function testKey(){
   const el=document.getElementById('apiTR');
   el.style.display='block';
   if(!key){el.style.color='var(--warn)';el.textContent='⚠️ Pega tu API Key arriba primero.';return;}
-  el.style.color='var(--text-dim)';el.textContent='⏳ Probando con Gemini...';
-  try{
-    const raw=await callGemini([{text:'Responde solo: OK'}],key);
-    if(raw.trim().length>0){
-      el.style.color='var(--accent2)';
-      el.innerHTML='✅ <b>API Key valida!</b> Gemini respondio correctamente. Ya puedes guardar y usar la IA.';
-      S.setKey(key);showToast('¡API Key valida! ✓','success');
-    }else{el.style.color='var(--danger)';el.textContent='❌ Respuesta vacia inesperada.';}
-  }catch(err){
-    el.style.color='var(--danger)';
-    el.innerHTML=`❌ <b>${esc(err.message)}</b>`;
+  el.style.color='var(--text-dim)';
+  let lastErr='';
+  for(const model of MODELS_TO_TRY){
+    el.textContent=`⏳ Probando modelo: ${model}...`;
+    try{
+      const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+      const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({contents:[{parts:[{text:'Responde solo: OK'}]}]})});
+      const data=await res.json();
+      const txt=data?.candidates?.[0]?.content?.parts?.[0]?.text||'';
+      if(res.ok && txt.trim().length>0){
+        WORKING_MODEL=model;
+        localStorage.setItem('nt_model',model);
+        S.setKey(key);
+        el.style.color='var(--accent2)';
+        el.innerHTML=`✅ <b>Funciona con: ${model}</b><br>La IA esta lista para usar.`;
+        showToast('¡API Key valida! Modelo: '+model,'success');
+        return;
+      }
+      lastErr=model+': '+(data?.error?.message||JSON.stringify(data).slice(0,80));
+    }catch(e){lastErr=model+': '+e.message;}
   }
+  el.style.color='var(--danger)';
+  el.innerHTML=`❌ <b>Ningun modelo funciono.</b><br><br>Ultimo error:<br>${esc(lastErr)}<br><br>`+
+    `• Verifica que la key empiece con <b>AIzaSy</b><br>`+
+    `• En <span style="color:var(--accent)">aistudio.google.com/app/apikey</span> crea una key nueva y asegurate que el proyecto tenga la Gemini API habilitada`;
 }
 
 // ── MODAL ──
