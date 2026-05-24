@@ -632,7 +632,7 @@ ${text?'Descripcion: '+text:'Analiza la imagen adjunta.'}`;
 
   try{
     const parts=[];
-    if(selImg)parts.push({inline_data:{mime_type:selImg.mimeType,data:selImg.base64}});
+    if(selImg)parts.push({inlineData:{mimeType:selImg.mimeType,data:selImg.base64}});
     parts.push({text:PROMPT});
     const raw=await callGemini(parts,key);
     const m=raw.match(/\{[\s\S]*\}/);
@@ -988,7 +988,7 @@ async function startBarcode(){
     reader.onload=async ev=>{
       try{
         const raw=await callGemini([
-          {inline_data:{mime_type:file.type,data:ev.target.result.split(',')[1]}},
+          {inlineData:{mimeType:file.type,data:ev.target.result.split(',')[1]}},
           {text:'Lee el codigo de barras EAN/UPC de esta imagen y devuelve SOLO el numero sin texto adicional. Si no hay codigo visible devuelve: none'}
         ],key);
         const code=raw.trim().replace(/\D/g,'');
