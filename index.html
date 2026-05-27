@@ -270,7 +270,7 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
         </div>
         <div id="tab-ai">
           <div class="ai-wrap">
-            <textarea id="foodInput" rows="3" placeholder="Describe tu comida con detalle&#10;Ej: Un plato de gallo pinto con huevo frito y natilla, porcion tipica de Costa Rica&#10;&#10;Gemini conoce comidas tipicas ticas &#127464;&#127479;"></textarea>
+            <textarea id="foodInput" rows="3" placeholder="Describe tu comida con detalle&#10;Ej: Un plato de gallo pinto con huevo frito y natilla, porcion tipica de Costa Rica&#10;&#10;La IA conoce comidas tipicas ticas &#127464;&#127479;"></textarea>
             <div id="imgPW" class="img-pw"><img id="prevImg" src="" alt=""><div class="img-clr" onclick="clearImg()">&#10005;</div></div>
             <div class="ai-act">
               <label for="fileInput" class="bic" title="Foto del plato">
@@ -279,7 +279,7 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
               <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleImg(event)">
               <button class="bp" id="analyzeBtn" onclick="analyzeFood()" style="flex:1;height:38px;font-size:12px">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                Analizar con Gemini
+                Analizar con IA
               </button>
             </div>
           </div>
@@ -371,10 +371,10 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
       <div class="sh"><div class="st">Ajustes</div></div>
       <div style="padding:0 12px">
         <div class="sb" style="margin-bottom:10px">
-          <div style="font-size:9px;color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:6px">API Key Gemini <span class="tbadge">GRATIS</span></div>
-          <div style="display:flex;gap:7px;margin-bottom:6px"><input class="fc" id="apiK" type="password" placeholder="AIzaSy..." style="flex:1"><button class="bic" onclick="toggleApi()" style="font-size:16px">&#128065;</button></div>
-          <div style="font-size:10px;color:var(--text-dim);margin-bottom:8px;line-height:1.5">Gratis en <span style="color:var(--accent)">aistudio.google.com/app/apikey</span><br>Crea la key en Default Gemini Project sin restricciones de dominio.</div>
-          <button onclick="testKey()" style="width:100%;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.4);border-radius:8px;padding:9px;font-family:var(--font-head);font-size:12px;font-weight:700;color:var(--accent);cursor:pointer">&#128300; Probar API Key</button>
+          <div style="font-size:9px;color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:6px">API Key Groq <span class="tbadge" style="background:rgba(0,255,157,.15);border-color:rgba(0,255,157,.4);color:var(--accent2)">GRATIS · SIN CORS</span></div>
+          <div style="display:flex;gap:7px;margin-bottom:6px"><input class="fc" id="apiK" type="password" placeholder="gsk_..." style="flex:1"><button class="bic" onclick="toggleApi()" style="font-size:16px">&#128065;</button></div>
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:8px;line-height:1.5">Gratis en <span style="color:var(--accent2)">console.groq.com</span> → API Keys → Create API Key<br>14,400 requests/dia · Sin restricciones · Funciona desde el navegador · Soporta fotos</div>
+          <button onclick="testKey()" style="width:100%;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.4);border-radius:8px;padding:9px;font-family:var(--font-head);font-size:12px;font-weight:700;color:var(--accent);cursor:pointer">&#128300; Probar Groq Key</button>
           <div class="atr" id="apiTR"></div>
         </div>
         <div class="ct" style="padding:4px 0 10px;margin:0">Perfil fisico · Mifflin-St Jeor</div>
@@ -392,7 +392,7 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
           <div class="srow"><span class="sl">Grasas</span><span class="sv" style="color:var(--fat-col)" id="tF">-</span></div>
         </div>
         <button class="bp" onclick="saveSettings()" style="margin-bottom:10px">Calcular y Guardar</button>
-        <div style="text-align:center;font-size:10px;color:var(--text-dim);line-height:1.8;padding:6px 0 4px">NutriTrack AI · Datos 100% locales · Sin backend · Sin anuncios<br><span style="color:var(--accent)">Powered by Gemini AI + Open Food Facts</span></div>
+        <div style="text-align:center;font-size:10px;color:var(--text-dim);line-height:1.8;padding:6px 0 4px">NutriTrack AI · Datos 100% locales · Sin backend · Sin anuncios<br><span style="color:var(--accent)">Powered by Groq AI (Llama) + Open Food Facts</span></div>
       </div>
       <div class="sp"></div>
     </div>
@@ -424,8 +424,8 @@ const S = {
   setLib:(v)=>S.set('nt_library',v),
   getRec:()=>S.get('nt_recipes')||[],
   setRec:(v)=>S.set('nt_recipes',v),
-  getKey:()=>localStorage.getItem('nt_apikey')||'',
-  setKey:(v)=>localStorage.setItem('nt_apikey',v),
+  getKey:()=>localStorage.getItem('nt_groqkey')||'',
+  setKey:(v)=>localStorage.setItem('nt_groqkey',v),
   getGoal:()=>S.get('nt_goal'),
   setGoal:(v)=>S.set('nt_goal',v),
   getW:()=>S.get('nt_weights')||[],
@@ -580,23 +580,50 @@ function bumpLib(name){
 }
 
 // ── GEMINI ──
-// Model is detected automatically by testKey() and stored
-let WORKING_MODEL = localStorage.getItem('nt_model') || 'gemini-1.5-flash';
-const MODELS_TO_TRY = ['gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash','gemini-1.5-flash-latest','gemini-1.5-pro','gemini-pro'];
-const GURL=key=>`https://generativelanguage.googleapis.com/v1beta/models/${WORKING_MODEL}:generateContent?key=${key}`;
+// ── GROQ CONFIG ──
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_TEXT_MODEL  = 'llama-3.3-70b-versatile';
+const GROQ_VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
-async function callGemini(parts,key){
-  const res=await fetch(GURL(key),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts}]})});
-  const data=await res.json();
-  if(!res.ok){
-    const code=data?.error?.code||res.status;
-    const msg=data?.error?.message||'';
-    if(code===400)throw new Error('API Key invalida. Verifica que empiece con AIzaSy...');
-    if(code===403)throw new Error('La key tiene restricciones de dominio. En Google Cloud Console quita las restricciones de la key.');
-    if(code===429)throw new Error('Cuota diaria agotada. Espera unos minutos o crea un nuevo proyecto en AI Studio.');
-    throw new Error(msg||`Error ${code}`);
+async function callGroq(messages, key, model) {
+  const mdl = model || GROQ_TEXT_MODEL;
+  const res = await fetch(GROQ_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+    body: JSON.stringify({ model: mdl, messages, temperature: 0.3, max_tokens: 800 })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const msg = data?.error?.message || '';
+    const code = data?.error?.code || res.status;
+    if (code === 401 || msg.toLowerCase().includes('invalid'))
+      throw new Error('API Key de Groq invalida. Ve a console.groq.com y crea una nueva.');
+    if (code === 429)
+      throw new Error('Limite de Groq alcanzado. Espera un momento.');
+    throw new Error(msg || 'Error ' + res.status);
   }
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text||'';
+  return data?.choices?.[0]?.message?.content || '';
+}
+
+
+async function callGroq(messages, key, model) {
+  const mdl = model || GROQ_TEXT_MODEL;
+  const res = await fetch(GROQ_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+    body: JSON.stringify({ model: mdl, messages, temperature: 0.3, max_tokens: 600 })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const code = data?.error?.code || res.status;
+    const msg  = data?.error?.message || '';
+    if (code === 401 || msg.includes('invalid') || msg.includes('Invalid'))
+      throw new Error('API Key de Groq invalida. Ve a console.groq.com y crea una nueva.');
+    if (code === 429)
+      throw new Error('Limite de Groq alcanzado. Espera un momento (14,400 requests/dia gratis).');
+    throw new Error(msg || 'Error ' + res.status);
+  }
+  return data?.choices?.[0]?.message?.content || '';
 }
 
 function libCtx(){
@@ -610,35 +637,37 @@ async function analyzeFood(){
   const text=document.getElementById('foodInput').value.trim();
   if(!text&&!selImg){showToast('Describe un alimento o sube una foto','warn');return;}
   const key=S.getKey();
-  if(!key){showToast('Configura tu API Key de Gemini en Ajustes','error');return;}
+  if(!key){showToast('Configura tu API Key de Groq en Ajustes','error');return;}
   const btn=document.getElementById('analyzeBtn');
   btn.disabled=true;
   btn.innerHTML='<div class="ldots"><span></span><span></span><span></span></div> Analizando...';
   document.getElementById('aiResult').classList.remove('visible');
 
   const PROMPT=`Eres un nutricionista experto con amplio conocimiento de la gastronomia costarricense y latinoamericana.
-Analiza el alimento o plato descrito/fotografiado y devuelve UNICAMENTE un objeto JSON valido, sin texto extra, sin bloques de codigo markdown.
-
-Formato EXACTO (todos los valores numericos son enteros):
-{"alimento":"Nombre descriptivo del plato","porcion":"Descripcion de porcion tipica (ej: 1 plato mediano ~350g, 2 tortillas ~60g)","pesoPorcion":350,"calorias":450,"proteinas":25,"carbohidratos":55,"grasas":12,"matchedLibrary":false,"nota":"Nota breve si aplica"}
-
-Reglas:
-- Estima la porcion TIPICA que come una persona en Costa Rica o Latinoamerica
-- Si el usuario menciona cantidad especifica usala
-- Si coincide con biblioteca personal usa esos valores y pon matchedLibrary:true
-- Sé preciso, no subestimes porciones
+Analiza el alimento descrito${selImg?' y la imagen adjunta':''} y devuelve UNICAMENTE JSON valido sin texto extra ni bloques de codigo.
+Formato exacto (valores numericos enteros):
+{"alimento":"Nombre del plato","porcion":"Porcion tipica (ej: 1 plato ~350g, 2 huevos ~120g)","pesoPorcion":350,"calorias":450,"proteinas":25,"carbohidratos":55,"grasas":12,"matchedLibrary":false,"nota":"Nota breve si aplica"}
+Reglas: estima la porcion TIPICA de Costa Rica/Latinoamerica. Si el usuario dice la cantidad usala. Se preciso.
 ${libCtx()}
-${text?'Descripcion: '+text:'Analiza la imagen adjunta.'}`;
+${text?'Descripcion: '+text:'Analiza la imagen.'}`;
 
   try{
-    const parts=[];
-    if(selImg)parts.push({inlineData:{mimeType:selImg.mimeType,data:selImg.base64}});
-    parts.push({text:PROMPT});
-    const raw=await callGemini(parts,key);
-    const m=raw.match(/\{[\s\S]*\}/);
-    if(!m)throw new Error('Gemini no devolvio JSON. Intenta describir el alimento con mas detalle.');
-    const food=JSON.parse(m[0]);
-    if(!food.alimento||food.calorias===undefined)throw new Error('Respuesta incompleta de Gemini.');
+    let messages;
+    if(selImg){
+      // Use vision model with image
+      messages=[{role:'user',content:[
+        {type:'image_url',image_url:{url:`data:${selImg.mimeType};base64,${selImg.base64}`}},
+        {type:'text',text:PROMPT}
+      ]}];
+    } else {
+      messages=[{role:'user',content:PROMPT}];
+    }
+    const model = selImg ? GROQ_VISION_MODEL : GROQ_TEXT_MODEL;
+    const raw=await callGroq(messages,key,model);
+    const m2=raw.match(/\{[\s\S]*\}/);
+    if(!m2)throw new Error('La IA no devolvio JSON. Intenta describir el alimento con mas detalle.');
+    const food=JSON.parse(m2[0]);
+    if(!food.alimento||food.calorias===undefined)throw new Error('Respuesta incompleta.');
     pendingFood={...food};pendingBase={...food};
     document.getElementById('aiMult').value=1;
     document.getElementById('aiName').textContent=food.alimento;
@@ -659,9 +688,10 @@ ${text?'Descripcion: '+text:'Analiza la imagen adjunta.'}`;
     console.error(err);
   }finally{
     btn.disabled=false;
-    btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> Analizar con Gemini';
+    btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> Analizar con IA';
   }
 }
+
 
 function updateMult(){
   if(!pendingBase)return;
@@ -888,7 +918,7 @@ Devuelve SOLO JSON valido sin texto extra:
 {"nombre":"Nombre receta","porciones":2,"ingredientes":[{"nombre":"Ingrediente","gramos":100,"cal100":165,"p100":31,"c100":0,"f100":4}]}
 Receta: ${prompt}`;
   try{
-    const raw=await callGemini([{text:PROMPT}],key);
+    const raw=await callGroq([{role:'user',content:PROMPT}],key,GROQ_TEXT_MODEL);
     const m=raw.match(/\{[\s\S]*\}/);if(!m)throw new Error('No JSON');
     const recipe=JSON.parse(m[0]);
     if(document.getElementById('rNm'))document.getElementById('rNm').value=recipe.nombre||'';
@@ -987,10 +1017,10 @@ async function startBarcode(){
     const reader=new FileReader();
     reader.onload=async ev=>{
       try{
-        const raw=await callGemini([
-          {inlineData:{mimeType:file.type,data:ev.target.result.split(',')[1]}},
-          {text:'Lee el codigo de barras EAN/UPC de esta imagen y devuelve SOLO el numero sin texto adicional. Si no hay codigo visible devuelve: none'}
-        ],key);
+        const raw=await callGroq([{role:'user',content:[
+          {type:'image_url',image_url:{url:`data:${file.type};base64,${ev.target.result.split(',')[1]}`}},
+          {type:'text',text:'Lee el codigo de barras EAN/UPC de esta imagen y devuelve SOLO el numero sin texto adicional. Si no hay codigo visible devuelve: none'}
+        ]}],key,GROQ_VISION_MODEL);
         const code=raw.trim().replace(/\D/g,'');
         if(!code||code.length<7){showToast('No se detecto codigo de barras','error');return;}
         document.getElementById('bcInput').value=code;lookupBC();
@@ -1183,7 +1213,7 @@ function saveSettings(){
   const tCal=goal==='cut'?Math.round(tdee*.8):goal==='bulk'?Math.round(tdee*1.15):tdee;
   const protein=Math.round(weight*2),fat=Math.round((tCal*.25)/9),carbs=Math.round((tCal-protein*4-fat*9)/4);
   S.set('nt_profile',{age,gender,weight,height,activity,goal,calories:tCal,protein,carbs,fat,bmr:Math.round(bmr),tdee});
-  if(apiKey)S.setKey(apiKey);
+  if(apiKey)S.setKey(apiKey); // Groq key
   document.getElementById('tTMB').textContent=`${Math.round(bmr)} kcal`;
   document.getElementById('tTDEE').textContent=`${tdee} kcal`;
   document.getElementById('tGoal').textContent=`${tCal} kcal`;
@@ -1199,33 +1229,31 @@ async function testKey(){
   const key=document.getElementById('apiK').value.trim();
   const el=document.getElementById('apiTR');
   el.style.display='block';
-  if(!key){el.style.color='var(--warn)';el.textContent='⚠️ Pega tu API Key arriba primero.';return;}
-  el.style.color='var(--text-dim)';
-  let lastErr='';
-  for(const model of MODELS_TO_TRY){
-    el.textContent=`⏳ Probando modelo: ${model}...`;
-    try{
-      const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-      const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({contents:[{parts:[{text:'Responde solo: OK'}]}]})});
-      const data=await res.json();
-      const txt=data?.candidates?.[0]?.content?.parts?.[0]?.text||'';
-      if(res.ok && txt.trim().length>0){
-        WORKING_MODEL=model;
-        localStorage.setItem('nt_model',model);
-        S.setKey(key);
-        el.style.color='var(--accent2)';
-        el.innerHTML=`✅ <b>Funciona con: ${model}</b><br>La IA esta lista para usar.`;
-        showToast('¡API Key valida! Modelo: '+model,'success');
-        return;
-      }
-      lastErr=model+': '+(data?.error?.message||JSON.stringify(data).slice(0,80));
-    }catch(e){lastErr=model+': '+e.message;}
+  if(!key){el.style.color='var(--warn)';el.textContent='⚠️ Pega tu Groq API Key arriba primero.';return;}
+  if(!key.startsWith('gsk_')){el.style.color='var(--warn)';el.textContent='⚠️ La key de Groq debe empezar con gsk_...';return;}
+  el.style.color='var(--text-dim)';el.textContent='⏳ Probando conexion con Groq...';
+  try{
+    const res=await fetch(GROQ_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({model:GROQ_TEXT_MODEL,messages:[{role:'user',content:'Di solo: OK'}],max_tokens:5})
+    });
+    const data=await res.json();
+    const txt=data?.choices?.[0]?.message?.content||'';
+    if(res.ok&&txt.trim().length>0){
+      S.setKey(key);
+      el.style.color='var(--accent2)';
+      el.innerHTML='✅ <b>¡Groq funciona perfectamente!</b><br>Modelo: '+GROQ_TEXT_MODEL+'<br>Fotos: '+GROQ_VISION_MODEL+'<br>14,400 requests/dia gratis. Guarda los ajustes.';
+      showToast('¡Groq Key valida! ✓','success');
+    }else{
+      const msg=data?.error?.message||JSON.stringify(data).slice(0,120);
+      el.style.color='var(--danger)';
+      el.innerHTML='❌ <b>Error: '+esc(msg)+'</b><br>Crea una key nueva en <a href="https://console.groq.com" target="_blank" style="color:var(--accent2)">console.groq.com</a>';
+    }
+  }catch(e){
+    el.style.color='var(--danger)';
+    el.innerHTML='❌ Error de red: '+esc(e.message);
   }
-  el.style.color='var(--danger)';
-  el.innerHTML=`❌ <b>Ningun modelo funciono.</b><br><br>Ultimo error:<br>${esc(lastErr)}<br><br>`+
-    `• Verifica que la key empiece con <b>AIzaSy</b><br>`+
-    `• En <span style="color:var(--accent)">aistudio.google.com/app/apikey</span> crea una key nueva y asegurate que el proyecto tenga la Gemini API habilitada`;
 }
 
 // ── MODAL ──
