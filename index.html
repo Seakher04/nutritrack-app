@@ -204,6 +204,40 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
 .div{height:1px;background:var(--border);margin:10px 0}
 .sp{height:10px}
 .tbadge{display:inline-block;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.2);color:var(--accent);font-size:8px;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:4px;font-family:var(--font-head);font-weight:700}
+/* CALENDAR */
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.cal-month{font-family:var(--font-head);font-size:14px;font-weight:800;color:var(--text)}
+.cal-arrow{width:30px;height:30px;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-mid);font-size:16px;-webkit-tap-highlight-color:transparent}
+.cal-arrow:active{border-color:var(--accent);color:var(--accent)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-header{text-align:center;font-family:var(--font-head);font-size:9px;font-weight:700;color:var(--text-dim);letter-spacing:1px;padding:4px 0}
+.cal-day{position:relative;aspect-ratio:1;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;border:1px solid transparent;transition:all .15s;background:var(--bg-input)}
+.cal-day:active{transform:scale(.9)}
+.cal-day.empty{background:transparent;border-color:transparent;cursor:default}
+.cal-day.future{opacity:.3;cursor:default}
+.cal-day.today{border-color:var(--accent)!important;box-shadow:0 0 8px rgba(0,212,255,.3)}
+.cal-day.green{background:rgba(0,255,157,.15);border-color:rgba(0,255,157,.4)}
+.cal-day.red{background:rgba(255,71,87,.12);border-color:rgba(255,71,87,.3)}
+.cal-day.orange{background:rgba(255,165,2,.12);border-color:rgba(255,165,2,.3)}
+.cal-dn{font-size:11px;font-family:var(--font-head);font-weight:700;color:var(--text);line-height:1}
+.cal-gym{font-size:10px;line-height:1;margin-top:2px}
+.cal-dot{width:4px;height:4px;border-radius:50%;margin-top:2px}
+.cal-day.green .cal-dn{color:var(--accent2)}
+.cal-day.red .cal-dn{color:var(--danger)}
+.cal-day.orange .cal-dn{color:var(--warn)}
+/* LEGEND */
+.cal-legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;justify-content:center}
+.leg-item{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-dim)}
+.leg-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+/* WATER */
+.water-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin:0 12px 10px}
+.water-glasses{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 8px;justify-content:center}
+.wglass{font-size:22px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .1s;opacity:.3;filter:grayscale(1)}
+.wglass.filled{opacity:1;filter:none;animation:wfill .2s ease}
+.wglass:active{transform:scale(.85)}
+@keyframes wfill{from{transform:scale(1.3)}to{transform:scale(1)}}
+.water-goal-row{display:flex;align-items:center;gap:8px;margin-top:8px}
+.water-info{font-size:11px;color:var(--text-mid);text-align:center}
 </style>
 </head>
 <body>
@@ -256,14 +290,38 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
           <div class="mi fat"><div class="ml">Grasas</div><div class="mv"><span id="fCur">0</span><small style="font-size:9px">g</small></div><div class="mg" id="fGoal">/&#8212;g</div><div class="mbo"><div class="mbi" id="fBar" style="width:0%"></div></div></div>
         </div>
       </div>
-      <div class="card"><div class="ct">Alimentos del día</div><div class="flist" id="flist"></div></div>
+      <div class="water-card">
+  <div class="ct">Agua del d&#237;a</div>
+  <div class="water-glasses" id="waterGlasses"></div>
+  <div class="water-info" id="waterInfo">0 / 8 vasos</div>
+  <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+    <span style="font-size:10px;color:var(--text-dim)">Vasos:</span>
+    <input id="waterGoal" type="number" value="8" min="1" max="20"
+      style="width:44px;background:var(--bg-input);border:1px solid var(--border);border-radius:7px;color:var(--accent);font-family:var(--font-mono);font-size:13px;padding:4px 6px;text-align:center;outline:none"
+      onchange="setWaterGoal(this.value)">
+    <span style="font-size:10px;color:var(--text-dim)">Tama&#241;o:</span>
+    <select id="waterMlSel" onchange="setWaterMl(this.value)"
+      style="background:var(--bg-input);border:1px solid var(--border);border-radius:7px;color:var(--accent);font-family:var(--font-mono);font-size:12px;padding:4px 6px;outline:none;appearance:none;-webkit-appearance:none">
+      <option value="150">150 ml</option>
+      <option value="200">200 ml</option>
+      <option value="250" selected>250 ml</option>
+      <option value="300">300 ml</option>
+      <option value="350">350 ml</option>
+      <option value="500">500 ml</option>
+      <option value="750">750 ml</option>
+      <option value="1000">1 L</option>
+    </select>
+    <button onclick="resetWater()" style="margin-left:auto;background:none;border:none;font-size:18px;cursor:pointer;color:var(--text-dim)" title="Reiniciar">&#8635;</button>
+  </div>
+</div>
+<div class="card"><div class="ct">Alimentos del d&#237;a</div><div class="flist" id="flist"></div></div>
       <div class="sp"></div>
     </div>
 
     <div class="page" id="page-log">
       <div style="padding:6px 12px 0">
         <div class="tab-row" id="logTabs">
-          <div class="tab-btn active" onclick="switchTab('ai',this)">&#129302; IA Gemini</div>
+          <div class="tab-btn active" onclick="switchTab('ai',this)">&#129302; IA (Groq)</div>
           <div class="tab-btn" onclick="switchTab('lib',this)">&#128218; Biblioteca</div>
           <div class="tab-btn" onclick="switchTab('man',this)">&#9999;&#65039; Manual</div>
           <div class="tab-btn" onclick="switchTab('rec',this)">&#128336; Recientes</div>
@@ -325,7 +383,7 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
 
     <div class="page" id="page-recipes">
       <div class="sh"><div class="st">Mis Recetas</div><button class="bs" style="width:auto;padding:0 14px;font-size:11px;height:34px" onclick="openNewRecipe()">+ Nueva</button></div>
-      <div class="ss">Guarda recetas con ingredientes. Gemini las puede generar automaticamente.</div>
+      <div class="ss">Guarda recetas con ingredientes. Groq AI la puede generar automaticamente.</div>
       <div id="recList"></div>
       <div class="sp"></div>
     </div>
@@ -334,7 +392,7 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
       <div class="sh"><div class="st">Codigo de barras</div></div>
       <div class="ss">Escanea productos empacados usando Open Food Facts — base de datos mundial gratuita.</div>
       <div style="padding:0 12px">
-        <div class="bca" onclick="startBarcode()"><div style="font-size:36px;margin-bottom:8px">&#128247;</div><div style="font-family:var(--font-head);font-size:14px;font-weight:700;color:var(--accent);margin-bottom:4px">Escanear con camara</div><div style="font-size:11px;color:var(--text-dim)">Gemini lee el codigo automaticamente</div></div>
+        <div class="bca" onclick="startBarcode()"><div style="font-size:36px;margin-bottom:8px">&#128247;</div><div style="font-family:var(--font-head);font-size:14px;font-weight:700;color:var(--accent);margin-bottom:4px">Escanear con camara</div><div style="font-size:11px;color:var(--text-dim)">La IA lee el codigo automaticamente</div></div>
         <div style="text-align:center;font-size:11px;color:var(--text-dim);margin-bottom:10px">&#8212; o ingresa el codigo manualmente &#8212;</div>
         <div style="display:flex;gap:7px;margin-bottom:10px"><input class="fc" id="bcInput" type="number" placeholder="Ej: 7501234567890" style="flex:1"><button class="bp" style="width:auto;padding:0 14px;font-size:12px" onclick="lookupBC()">Buscar</button></div>
         <div id="bcResult"></div>
@@ -361,8 +419,33 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
     </div>
 
     <div class="page" id="page-stats">
-      <div class="sh"><div class="st">Estadisticas</div></div>
-      <div class="card"><div class="ct">Calorias &#8212; ultimos 7 dias</div><div class="wc" id="wChart"></div></div>
+      <div class="sh"><div class="st">H&#225;bitos &amp; Stats</div></div>
+
+      <!-- Calendar -->
+      <div class="card">
+        <div class="cal-nav">
+          <div class="cal-arrow" onclick="calPrev()">&#8249;</div>
+          <div class="cal-month" id="calMonth">Mayo 2026</div>
+          <div class="cal-arrow" onclick="calNext()">&#8250;</div>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+        <div class="cal-legend">
+          <div class="leg-item"><div class="leg-dot" style="background:rgba(0,255,157,.4)"></div>Bajo meta</div>
+          <div class="leg-item"><div class="leg-dot" style="background:rgba(255,165,2,.4)"></div>Cerca de meta</div>
+          <div class="leg-item"><div class="leg-dot" style="background:rgba(255,71,87,.4)"></div>Sobre meta</div>
+          <div class="leg-item">&#128170; Gym</div>
+        </div>
+        <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:8px">Toca un d&#237;a para marcar si fuiste al gym</div>
+      </div>
+
+      <!-- Gym streak -->
+      <div class="card">
+        <div class="ct">Racha de gym</div>
+        <div id="gymStreak"></div>
+      </div>
+
+      <!-- Stats -->
+      <div class="card"><div class="ct">Calorias &#8212; &#250;ltimos 7 d&#237;as</div><div class="wc" id="wChart"></div></div>
       <div class="card"><div class="ct">Promedios semanales</div><div id="statsB"></div></div>
       <div class="sp"></div>
     </div>
@@ -403,7 +486,7 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
     <button class="nb" id="nav-log" onclick="showPage('log')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg><span>Registrar</span></button>
     <button class="nb" id="nav-recipes" onclick="showPage('recipes')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg><span>Recetas</span></button>
     <button class="nb" id="nav-goal" onclick="showPage('goal')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span>Meta</span></button>
-    <button class="nb" id="nav-stats" onclick="showPage('stats')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Stats</span></button>
+    <button class="nb" id="nav-stats" onclick="showPage('stats')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>H&#225;bitos</span></button>
     <button class="nb" id="nav-settings" onclick="showPage('settings')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Ajustes</span></button>
   </nav>
 </div>
@@ -411,7 +494,7 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
 <datalist id="iSug"></datalist>
 
 <script>
-// NutriTrack AI v4 - Clean - Gemini Only
+// NutriTrack AI v4 - Clean - Groq AI
 // Storage: nt_profile, nt_foods, nt_library, nt_recipes, nt_apikey, nt_goal, nt_weights
 
 const S = {
@@ -430,6 +513,10 @@ const S = {
   setGoal:(v)=>S.set('nt_goal',v),
   getW:()=>S.get('nt_weights')||[],
   setW:(v)=>S.set('nt_weights',v),
+  getGym:()=>S.get('nt_gym')||{},
+  setGym:(v)=>S.set('nt_gym',v),
+  getWater:()=>S.get('nt_water')||{},
+  setWater:(v)=>S.set('nt_water',v),
 };
 
 const BL=[
@@ -484,13 +571,13 @@ function showPage(n){
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+n).classList.add('active');
   const nb=document.getElementById('nav-'+n);if(nb)nb.classList.add('active');
-  if(n==='stats')renderStats();
+  if(n==='stats'){renderStats();renderCalendar();renderGymStreak();}
   if(n==='settings')loadSettings();
   if(n==='recipes')renderRecList();
   if(n==='goal')renderGoal();
   if(n==='log'){renderLib();renderRecFreq();}
 }
-function goToday(){curDate=todayStr();renderDash();}
+function goToday(){curDate=todayStr();renderDash();renderWater();}
 function changeDay(d){
   const [y,m,dy]=curDate.split('-').map(Number);
   const dt=new Date(y,m-1,dy);dt.setDate(dt.getDate()+d);
@@ -498,6 +585,7 @@ function changeDay(d){
   if(dt>today){showToast('No puedes ir al futuro','warn');return;}
   curDate=`${dt.getFullYear()}-${p2(dt.getMonth()+1)}-${p2(dt.getDate())}`;
   renderDash();
+  renderWater();
 }
 function switchTab(n,el){
   ['ai','lib','man','rec'].forEach(t=>document.getElementById('tab-'+t).style.display=t===n?'block':'none');
@@ -535,6 +623,7 @@ function renderDash(){
   document.getElementById('pBar').style.width=prof?.protein?`${Math.min(totP/prof.protein*100,100)}%`:'0%';
   document.getElementById('cBar').style.width=prof?.carbs?`${Math.min(totC/prof.carbs*100,100)}%`:'0%';
   document.getElementById('fBar').style.width=prof?.fat?`${Math.min(totF/prof.fat*100,100)}%`:'0%';
+  renderWater();
   const list=document.getElementById('flist');
   if(!day.length){list.innerHTML='<div class="empty"><span class="emoji">🍽️</span>Nada registrado todavía.<br>¡Agrega tu primera comida!</div>';return;}
   list.innerHTML=day.map(f=>`
@@ -579,7 +668,7 @@ function bumpLib(name){
   if(item){item.useCount=(item.useCount||0)+1;item.lastUsed=todayStr();S.setLib(lib);}
 }
 
-// ── GEMINI ──
+// ── GROQ AI ──
 // ── GROQ CONFIG ──
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_TEXT_MODEL  = 'llama-3.3-70b-versatile';
@@ -868,7 +957,7 @@ function openNewRecipe(){
     <div style="font-size:10px;color:var(--text-dim);margin-bottom:8px">Escribe el nombre exacto de un alimento de tu biblioteca para autocompletar sus macros.</div>
     <div id="ingBW"></div>
     <button class="bs" onclick="addIng()" style="margin-bottom:12px;height:38px;font-size:11px">+ Agregar ingrediente</button>
-    <div class="ct" style="padding:2px 0 8px;margin:0">🤖 Crear con Gemini</div>
+    <div class="ct" style="padding:2px 0 8px;margin:0">🤖 Crear con Groq AI</div>
     <div style="display:flex;gap:7px;margin-bottom:12px">
       <input class="fc" id="aiRP" placeholder="Ej: Sopa de pollo con verduras, 4 porciones" style="flex:1;font-size:12px">
       <button class="bs" onclick="aiRecipe()" style="width:auto;padding:0 12px;font-size:11px;white-space:nowrap">Generar</button>
@@ -910,8 +999,8 @@ function autoFill(rowId,text){
 async function aiRecipe(){
   const prompt=document.getElementById('aiRP')?.value?.trim();
   if(!prompt){showToast('Describe la receta primero','warn');return;}
-  const key=S.getKey();if(!key){showToast('Configura tu API Key de Gemini','error');return;}
-  showToast('Creando receta con Gemini...','');
+  const key=S.getKey();if(!key){showToast('Configura tu API Key de Groq en Ajustes','error');return;}
+  showToast('Creando receta con Groq AI...','');
   const PROMPT=`Eres nutricionista experto en gastronomia costarricense y latinoamericana.
 Crea una receta con informacion nutricional por ingrediente.
 Devuelve SOLO JSON valido sin texto extra:
@@ -970,7 +1059,7 @@ function updRIG(recId,idx,val){
 
 function renderRecList(){
   const recs=S.getRec();const w=document.getElementById('recList');if(!w)return;
-  if(!recs.length){w.innerHTML='<div class="empty" style="padding:28px 16px"><span class="emoji">📖</span>Sin recetas aun.<br>Crea la primera con ingredientes o pidele a Gemini que la genere.</div>';return;}
+  if(!recs.length){w.innerHTML='<div class="empty" style="padding:28px 16px"><span class="emoji">📖</span>Sin recetas aun.<br>Crea la primera con ingredientes o pidele a Groq AI que la genere.</div>';return;}
   w.innerHTML=recs.map(rec=>{
     const per=calcPort(rec,1);
     return `
@@ -1008,7 +1097,7 @@ function renderRecList(){
 
 // ── BARCODE ──
 async function startBarcode(){
-  const key=S.getKey();if(!key){showToast('Necesitas API Key de Gemini en Ajustes','error');return;}
+  const key=S.getKey();if(!key){showToast('Necesitas API Key de Groq en Ajustes','error');return;}
   const input=document.createElement('input');
   input.type='file';input.accept='image/*';input.capture='environment';
   input.onchange=async(e)=>{
@@ -1092,8 +1181,45 @@ function saveGoal(){
   const pace=document.getElementById('gPace').value;
   if(!cw||!tw||!td){showToast('Completa todos los campos','warn');return;}
   S.setGoal({currentWeight:cw,targetWeight:tw,targetDate:td,pace});
-  const prof=S.getProfile();if(prof){prof.weight=cw;S.set('nt_profile',prof);}
-  showToast('Meta guardada','success');renderGoal();
+
+  // Calculate calorie target from goal and apply to profile
+  const prof=S.getProfile();
+  if(prof){
+    const diff=cw-tw;
+    const today=new Date();
+    const target=new Date(td);
+    const daysLeft=Math.max(7,Math.ceil((target-today)/(1000*60*60*24)));
+    const weeksLeft=daysLeft/7;
+    let rate=pace==='auto'?Math.min(Math.abs(diff)/weeksLeft,1):parseFloat(pace);
+    const dailyDelta=Math.round(rate*7700/7);
+    const tdee=prof.tdee||0;
+    let newCal=tdee;
+    if(tdee>0){
+      newCal=diff>0?tdee-dailyDelta:tdee+dailyDelta;
+      newCal=Math.max(1200,newCal); // never below 1200 kcal
+    }
+    // Recalculate macros based on new calorie target
+    const protein=Math.round((prof.weight||cw)*2);
+    const fat=Math.round((newCal*0.25)/9);
+    const carbs=Math.round((newCal-protein*4-fat*9)/4);
+    prof.weight=cw;
+    if(tdee>0){
+      prof.calories=newCal;
+      prof.protein=protein;
+      prof.carbs=Math.max(0,carbs);
+      prof.fat=fat;
+    }
+    S.set('nt_profile',prof);
+    renderDash();
+    if(tdee>0){
+      showToast(`Meta guardada · Nueva meta: ${newCal} kcal/dia`,'success');
+    }else{
+      showToast('Meta guardada. Configura tu perfil en Ajustes para calcular calorias','warn');
+    }
+  }else{
+    showToast('Guarda tu perfil en Ajustes primero para sincronizar calorias','warn');
+  }
+  renderGoal();
 }
 function logW(){
   const w=parseFloat(document.getElementById('wInput').value);
@@ -1143,7 +1269,7 @@ function renderGoal(){
         <div class="srow"><span class="sl">Objetivo</span><span class="sv grn">${diff>0?'Perder':'Ganar'} ${Math.abs(diff).toFixed(1)} kg</span></div>
         <div class="srow"><span class="sl">Ritmo${goal.pace==='auto'?' (auto)':''}</span><span class="sv">${rate.toFixed(2)} kg/semana</span></div>
         <div class="srow"><span class="sl">${diff>0?'Deficit':'Superavit'} diario</span><span class="sv">${dailyD} kcal</span></div>
-        ${tCal>0?`<div class="srow"><span class="sl">Calorias meta</span><span class="sv acc">${tCal} kcal/dia</span></div>`:''}
+        ${tCal>0?`<div class="srow"><span class="sl">Calorias meta diaria</span><span class="sv acc">${tCal} kcal/dia <span style='font-size:9px;color:var(--accent2)'>✓ sincronizado</span></span></div>`:''}
         <div class="srow"><span class="sl">Dias restantes</span><span class="sv">${daysLeft} dias</span></div>
       </div>
       ${rate>0.75?'<div style="background:rgba(255,165,2,.08);border:1px solid rgba(255,165,2,.3);border-radius:8px;padding:10px;margin-top:10px;font-size:11px;color:var(--warn);line-height:1.5">⚠️ Mas de 0.75 kg/semana puede causar perdida de musculo. Recomendado: 0.5 kg/semana con ejercicio.</div>':''}
@@ -1280,6 +1406,182 @@ function buildDS(){
   dl.innerHTML=S.getLib().map(i=>`<option value="${esc(i.name)}">`).join('');
 }
 
+
+// ══════════════════════════════
+//  WATER TRACKER
+// ══════════════════════════════
+function getWaterGoal()  { return parseInt(localStorage.getItem('nt_watergoal') || '8'); }
+function getWaterMl()    { return parseInt(localStorage.getItem('nt_waterml') || '250'); }
+function setWaterGoal(v) {
+  localStorage.setItem('nt_watergoal', Math.max(1, Math.min(20, parseInt(v)||8)));
+  renderWater();
+}
+function setWaterMl(v) {
+  const ml = [150,200,250,300,350,500,750,1000];
+  const val = ml.includes(parseInt(v)) ? parseInt(v) : 250;
+  localStorage.setItem('nt_waterml', val);
+  renderWater();
+}
+function getWaterCount() { return S.getWater()[curDate] || 0; }
+
+function setWater(n) {
+  const w = S.getWater();
+  w[curDate] = Math.max(0, Math.min(n, getWaterGoal()));
+  S.setWater(w);
+  renderWater();
+}
+function resetWater() { setWater(0); }
+
+function renderWater() {
+  const goal    = getWaterGoal();
+  const mlEach  = getWaterMl();
+  const current = getWaterCount();
+  const wrap    = document.getElementById('waterGlasses'); if (!wrap) return;
+  const infoEl  = document.getElementById('waterInfo');
+  const goalEl  = document.getElementById('waterGoal');
+  const mlEl    = document.getElementById('waterMlSel');
+  if (goalEl && parseInt(goalEl.value) !== goal) goalEl.value = goal;
+  if (mlEl && parseInt(mlEl.value) !== mlEach) mlEl.value = mlEach;
+  const totalMl = current * mlEach;
+  const goalMl  = goal * mlEach;
+  if (infoEl) {
+    infoEl.textContent = `${current} / ${goal} vasos · ${totalMl} / ${goalMl} ml`;
+    infoEl.style.color = current >= goal ? 'var(--accent2)' : 'var(--text-mid)';
+  }
+  wrap.innerHTML = Array.from({length: goal}, (_, i) => {
+    const filled = i < current;
+    return `<div class="wglass${filled?' filled':''}" onclick="setWater(${filled && i===current-1 ? i : i+1})" title="${(i+1)*mlEach}ml">&#127861;</div>`;
+  }).join('');
+}
+
+// ══════════════════════════════
+//  CALENDAR & GYM TRACKER
+// ══════════════════════════════
+let calYear  = new Date().getFullYear();
+let calMonth = new Date().getMonth(); // 0-indexed
+
+const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const DAY_LABELS  = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+
+function calPrev() {
+  calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; }
+  renderCalendar();
+}
+function calNext() {
+  calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; }
+  renderCalendar();
+}
+
+function toggleGym(dateStr) {
+  const gym = S.getGym();
+  gym[dateStr] = !gym[dateStr];
+  S.setGym(gym);
+  renderCalendar();
+  renderGymStreak();
+  showToast(gym[dateStr] ? '💪 Gym marcado!' : 'Gym desmarcado', gym[dateStr] ? 'success' : '');
+}
+
+function renderCalendar() {
+  const monthEl = document.getElementById('calMonth');
+  const gridEl  = document.getElementById('calGrid');
+  if (!monthEl || !gridEl) return;
+
+  monthEl.textContent = `${MONTH_NAMES[calMonth]} ${calYear}`;
+
+  const allFoods = S.getFoods();
+  const profile  = S.getProfile();
+  const gym      = S.getGym();
+  const today    = todayStr();
+
+  // First day of month (0=Sun..6=Sat), convert to Mon-first (0=Mon..6=Sun)
+  const firstDow = new Date(calYear, calMonth, 1).getDay();
+  const monFirst = (firstDow + 6) % 7; // shift so Mon=0
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+
+  // Header
+  let html = DAY_LABELS.map(d => `<div class="cal-header">${d}</div>`).join('');
+
+  // Empty cells before first day
+  for (let i = 0; i < monFirst; i++) html += '<div class="cal-day empty"></div>';
+
+  // Day cells
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${calYear}-${p2(calMonth+1)}-${p2(d)}`;
+    const foods   = allFoods[dateStr] || [];
+    const cal     = foods.reduce((s, f) => s + (f.calorias||0), 0);
+    const goal    = profile?.calories || 0;
+    const isToday = dateStr === today;
+    const isFuture = dateStr > today;
+    const hasGym  = gym[dateStr];
+    const hasData = cal > 0;
+
+    let cls = 'cal-day';
+    if (isFuture) cls += ' future';
+    if (isToday)  cls += ' today';
+    if (!isFuture && hasData && goal > 0) {
+      const pct = cal / goal;
+      if      (pct <= 1.0)  cls += ' green';
+      else if (pct <= 1.1)  cls += ' orange';
+      else                   cls += ' red';
+    }
+
+    const gymBadge = hasGym ? '<div class="cal-gym">&#128170;</div>' : '<div class="cal-gym" style="opacity:0">&#128170;</div>';
+    const calDot   = hasData && !isFuture
+      ? `<div class="cal-dot" style="background:${cal<=goal?'var(--accent2)':cal<=goal*1.1?'var(--warn)':'var(--danger)'}"></div>`
+      : '<div class="cal-dot"></div>';
+
+    html += `<div class="${cls}" onclick="${isFuture ? '' : `toggleGym('${dateStr}')`}">
+      <div class="cal-dn">${d}</div>
+      ${gymBadge}
+    </div>`;
+  }
+
+  gridEl.innerHTML = html;
+}
+
+function renderGymStreak() {
+  const el = document.getElementById('gymStreak'); if (!el) return;
+  const gym = S.getGym();
+  const today = new Date();
+  let streak = 0, total = 0, thisWeek = 0;
+
+  // Count streak (consecutive days ending today going backwards)
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(today); d.setDate(today.getDate() - i);
+    const str = `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`;
+    if (gym[str]) { streak++; }
+    else if (i > 0) break;
+  }
+
+  // Total gym days ever
+  total = Object.values(gym).filter(Boolean).length;
+
+  // This week (Mon-Sun)
+  const dow = (today.getDay() + 6) % 7; // Mon=0
+  for (let i = 0; i <= dow; i++) {
+    const d = new Date(today); d.setDate(today.getDate() - i);
+    const str = `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`;
+    if (gym[str]) thisWeek++;
+  }
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
+      <div style="background:var(--bg-input);border:1px solid var(--border);border-radius:10px;padding:12px 6px">
+        <div style="font-family:var(--font-head);font-size:26px;font-weight:800;color:var(--accent2)">${streak}</div>
+        <div style="font-size:9px;color:var(--text-dim);margin-top:2px;letter-spacing:1px">RACHA</div>
+      </div>
+      <div style="background:var(--bg-input);border:1px solid var(--border);border-radius:10px;padding:12px 6px">
+        <div style="font-family:var(--font-head);font-size:26px;font-weight:800;color:var(--accent)">${thisWeek}</div>
+        <div style="font-size:9px;color:var(--text-dim);margin-top:2px;letter-spacing:1px">ESTA SEMANA</div>
+      </div>
+      <div style="background:var(--bg-input);border:1px solid var(--border);border-radius:10px;padding:12px 6px">
+        <div style="font-family:var(--font-head);font-size:26px;font-weight:800;color:var(--accent4)">${total}</div>
+        <div style="font-size:9px;color:var(--text-dim);margin-top:2px;letter-spacing:1px">TOTAL</div>
+      </div>
+    </div>`;
+}
+
+
 // ── INIT ──
 (function(){
   if(!localStorage.getItem('nt_library'))S.setLib(JSON.parse(JSON.stringify(BL)));
@@ -1287,6 +1589,7 @@ function buildDS(){
   document.getElementById('ob').style.display=prof?'none':'flex';
   buildDS();
   renderDash();
+  renderWater();
   const gd=document.getElementById('gDate');
   if(gd){const mn=new Date();mn.setDate(mn.getDate()+7);gd.min=mn.toISOString().split('T')[0];}
 })();
