@@ -248,6 +248,8 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
 @keyframes wfill{from{transform:scale(1.3)}to{transform:scale(1)}}
 .water-goal-row{display:flex;align-items:center;gap:8px;margin-top:8px}
 .water-info{font-size:11px;color:var(--text-mid);text-align:center}
+.fedt{width:26px;height:26px;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.2);border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--accent);font-size:12px;flex-shrink:0;-webkit-tap-highlight-color:transparent}
+.fedt:active{background:rgba(0,212,255,.2);transform:scale(.88)}
 </style>
 </head>
 <body>
@@ -661,6 +663,7 @@ function renderDash(){
         ${f.porcion?`<div class="fportion">📏 ${esc(f.porcion)}</div>`:''}
       </div>
       <div class="fcals">${f.calorias}</div>
+      <div class="fedt" onclick="openEditEntry('${f.id}')">✏</div>
       <div class="fdel" onclick="delFood('${f.id}')">✕</div>
     </div>`).join('');
 }
@@ -830,18 +833,54 @@ ${text?'Descripcion: '+text:'Analiza la imagen adjunta.'}`;
 
 function renderIngBreakdown(ings, mult){
   const wrap=document.getElementById('aiIngList'); if(!wrap)return;
-  wrap.innerHTML=ings.map((ing,i)=>`
-    <div class="ing-break-row">
+  wrap.innerHTML=ings.map((ing,i)=>{
+    const g=Math.round((ing.gramos||100)*mult);
+    const cal=Math.round((ing.calorias||0)*mult);
+    const p=Math.round((ing.proteinas||0)*mult);
+    const c=Math.round((ing.carbohidratos||0)*mult);
+    const f=Math.round((ing.grasas||0)*mult);
+    return `<div class="ing-break-row" id="ibr_${i}">
       <input class="ing-cb" type="checkbox" id="icb_${i}" checked onchange="recalcAiTotals()">
       <div class="ing-break-info">
         <div class="ing-break-name">${esc(ing.nombre)}</div>
-        <div class="ing-break-mac">P:${Math.round((ing.proteinas||0)*mult)}g · C:${Math.round((ing.carbohidratos||0)*mult)}g · G:${Math.round((ing.grasas||0)*mult)}g</div>
+        <div class="ing-break-mac" id="ibm_${i}">P:${p}g · C:${c}g · G:${f}g</div>
       </div>
-      <div style="text-align:right;flex-shrink:0">
-        <div class="ing-break-cal">${Math.round((ing.calorias||0)*mult)}</div>
-        <div class="ing-break-g">${ing.gramos?Math.round(ing.gramos*mult)+'g':''}</div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
+        <div class="ing-break-cal" id="ibc_${i}">${cal}</div>
+        <div style="display:flex;align-items:center;gap:3px">
+          <input type="number" id="ibg_${i}" value="${g}" min="1" max="2000"
+            style="width:52px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--accent);font-family:var(--font-mono);font-size:11px;padding:3px 5px;text-align:center;outline:none"
+            oninput="updateIngGrams(${i},this.value)" onfocus="this.select()">
+          <span style="font-size:10px;color:var(--text-dim)">g</span>
+        </div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+  recalcAiTotals();
+}
+
+function updateIngGrams(i, newG){
+  if(!pendingFood||!pendingFood.ingredientes||!pendingFood.ingredientes[i])return;
+  if(!pendingBase||!pendingBase.ingredientes||!pendingBase.ingredientes[i])return;
+  const g=parseFloat(newG)||0;
+  const baseIng=pendingBase.ingredientes[i];
+  const baseG=baseIng.gramos||100;
+  const ratio=g/baseG;
+  // Update pendingFood ingredient in place
+  pendingFood.ingredientes[i]={
+    ...pendingFood.ingredientes[i],
+    gramos:g,
+    calorias:Math.round((baseIng.calorias||0)*ratio),
+    proteinas:Math.round((baseIng.proteinas||0)*ratio),
+    carbohidratos:Math.round((baseIng.carbohidratos||0)*ratio),
+    grasas:Math.round((baseIng.grasas||0)*ratio),
+  };
+  // Update row display
+  const ing=pendingFood.ingredientes[i];
+  const calEl=document.getElementById('ibc_'+i);
+  const macEl=document.getElementById('ibm_'+i);
+  if(calEl)calEl.textContent=ing.calorias;
+  if(macEl)macEl.textContent=`P:${ing.proteinas}g · C:${ing.carbohidratos}g · G:${ing.grasas}g`;
   recalcAiTotals();
 }
 
@@ -1484,6 +1523,89 @@ async function testKey(){
     el.style.color='var(--danger)';
     el.innerHTML='❌ Error de red: '+esc(e.message);
   }
+}
+
+
+// ── EDIT FOOD ENTRY ──
+function openEditEntry(id){
+  const foods=S.getFoods();
+  const day=foods[curDate]||[];
+  const f=day.find(x=>x.id===id);
+  if(!f)return;
+  openModal(`
+    <div class="mt">Editar alimento<div class="mc" onclick="closeModal()">✕</div></div>
+    <div class="fg"><label class="fl">Nombre</label>
+      <input class="fc" id="ef_name" type="text" value="${esc(f.name)}">
+    </div>
+    <div style="font-size:10px;color:var(--text-dim);margin-bottom:10px">
+      Cambia los gramos y se recalculan las calorias, o edita cada campo manualmente.
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Calorias</label>
+        <input class="fc" id="ef_cal" type="number" value="${f.calorias}" oninput="syncEditCalPerG()">
+      </div>
+      <div class="fg"><label class="fl">Gramos totales</label>
+        <input class="fc" id="ef_g" type="number" value="${f.porcion?parseInt(f.porcion)||0:0}" placeholder="0" oninput="recalcEditFromG('${id}')">
+      </div>
+    </div>
+    <div class="fr3">
+      <div class="fg"><label class="fl">Prot (g)</label>
+        <input class="fc" id="ef_p" type="number" value="${f.proteinas||0}">
+      </div>
+      <div class="fg"><label class="fl">Carb (g)</label>
+        <input class="fc" id="ef_c" type="number" value="${f.carbohidratos||0}">
+      </div>
+      <div class="fg"><label class="fl">Gras (g)</label>
+        <input class="fc" id="ef_f" type="number" value="${f.grasas||0}">
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Porcion (descripcion)</label>
+      <input class="fc" id="ef_por" type="text" value="${esc(f.porcion||'')}" placeholder="Ej: 1 plato ~350g">
+    </div>
+    <button class="bp" onclick="saveEditEntry('${id}')" style="height:42px;font-size:13px">&#10003; Guardar cambios</button>
+  `);
+  // Store original macros per gram for proportional recalc
+  window._editBase={
+    cal:f.calorias, p:f.proteinas||0, c:f.carbohidratos||0, f:f.grasas||0,
+    g:f.porcion?parseInt(f.porcion)||0:0
+  };
+}
+
+function recalcEditFromG(id){
+  if(!window._editBase||!window._editBase.g)return;
+  const newG=parseFloat(document.getElementById('ef_g').value)||0;
+  if(newG<=0||!window._editBase.g)return;
+  const ratio=newG/window._editBase.g;
+  document.getElementById('ef_cal').value=Math.round(window._editBase.cal*ratio);
+  document.getElementById('ef_p').value  =Math.round(window._editBase.p*ratio);
+  document.getElementById('ef_c').value  =Math.round(window._editBase.c*ratio);
+  document.getElementById('ef_f').value  =Math.round(window._editBase.f*ratio);
+  // Update portion label with new grams
+  const porEl=document.getElementById('ef_por');
+  if(porEl&&window._editBase.g>0){
+    const base=porEl.value.replace(/\d+g/,newG+'g');
+    porEl.value=base.includes('g')?base:porEl.value;
+  }
+}
+
+function saveEditEntry(id){
+  const foods=S.getFoods();
+  const day=foods[curDate]||[];
+  const idx=day.findIndex(x=>x.id===id);
+  if(idx<0){closeModal();return;}
+  const name=document.getElementById('ef_name').value.trim()||day[idx].name;
+  const cal =parseFloat(document.getElementById('ef_cal').value)||0;
+  const p   =parseFloat(document.getElementById('ef_p').value)||0;
+  const c   =parseFloat(document.getElementById('ef_c').value)||0;
+  const f   =parseFloat(document.getElementById('ef_f').value)||0;
+  const por =document.getElementById('ef_por').value.trim();
+  const g   =parseFloat(document.getElementById('ef_g').value)||0;
+  day[idx]={...day[idx],name,calorias:Math.round(cal),proteinas:Math.round(p),carbohidratos:Math.round(c),grasas:Math.round(f),porcion:g>0?`${g}g`:por};
+  foods[curDate]=day;
+  S.setFoods(foods);
+  closeModal();
+  renderDash();
+  showToast('Alimento actualizado ✓','success');
 }
 
 // ── MODAL ──
