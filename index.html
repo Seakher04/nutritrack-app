@@ -225,6 +225,16 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
 .cal-day.green .cal-dn{color:var(--accent2)}
 .cal-day.red .cal-dn{color:var(--danger)}
 .cal-day.orange .cal-dn{color:var(--warn)}
+/* INGREDIENT BREAKDOWN */
+.ing-break-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)}
+.ing-break-row:last-child{border-bottom:none}
+.ing-cb{width:18px;height:18px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+.ing-break-info{flex:1;min-width:0}
+.ing-break-name{font-size:12px;color:var(--text);font-family:var(--font-head);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ing-break-mac{font-size:10px;color:var(--text-dim);margin-top:1px}
+.ing-break-cal{font-family:var(--font-head);font-size:13px;font-weight:700;color:var(--cal-col);flex-shrink:0;text-align:right}
+.ing-break-g{font-size:10px;color:var(--text-dim);text-align:right}
+
 /* LEGEND */
 .cal-legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;justify-content:center}
 .leg-item{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-dim)}
@@ -342,23 +352,39 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
             </div>
           </div>
           <div class="ai-result" id="aiResult">
+            <!-- Header: dish name + portion -->
             <div class="ai-rh"><div class="ai-rn" id="aiName">&#8212;</div><div class="ai-pt" id="aiPT"></div></div>
             <div class="ai-pd" id="aiPD"></div>
-            <div class="ai-mg">
-              <div class="ai-chip"><div class="val" style="color:var(--cal-col)" id="aiCal">0</div><div class="lbl">KCAL</div></div>
-              <div class="ai-chip"><div class="val" style="color:var(--proto-col)" id="aiPro">0g</div><div class="lbl">PROT</div></div>
-              <div class="ai-chip"><div class="val" style="color:var(--carb-col)" id="aiCarb">0g</div><div class="lbl">CARB</div></div>
-              <div class="ai-chip"><div class="val" style="color:var(--fat-col)" id="aiFat">0g</div><div class="lbl">GRAS</div></div>
-            </div>
             <div class="ai-note" id="aiNote"></div>
+
+            <!-- Ingredient breakdown list -->
+            <div id="aiIngList" style="margin-bottom:10px"></div>
+
+            <!-- Totals row -->
+            <div style="background:var(--bg-input);border:1px solid var(--border-glow);border-radius:10px;padding:10px 12px;margin-bottom:10px">
+              <div style="font-size:9px;color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:7px;font-family:var(--font-head);font-weight:700">Total seleccionado</div>
+              <div class="ai-mg" style="margin:0">
+                <div class="ai-chip"><div class="val" style="color:var(--cal-col)" id="aiCal">0</div><div class="lbl">KCAL</div></div>
+                <div class="ai-chip"><div class="val" style="color:var(--proto-col)" id="aiPro">0g</div><div class="lbl">PROT</div></div>
+                <div class="ai-chip"><div class="val" style="color:var(--carb-col)" id="aiCarb">0g</div><div class="lbl">CARB</div></div>
+                <div class="ai-chip"><div class="val" style="color:var(--fat-col)" id="aiFat">0g</div><div class="lbl">GRAS</div></div>
+              </div>
+            </div>
+
+            <!-- Portion multiplier -->
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;background:var(--bg-input);border-radius:8px;padding:8px 10px;border:1px solid var(--border)">
-              <div style="font-size:10px;color:var(--text-dim);flex:1">Ajustar porciones:</div>
+              <div style="font-size:10px;color:var(--text-dim);flex:1">Porciones:</div>
               <input id="aiMult" type="number" value="1" min="0.25" max="10" step="0.25"
                 style="width:52px;background:var(--bg-deep);border:1px solid var(--border-glow);border-radius:7px;color:var(--accent);font-family:var(--font-mono);font-size:13px;padding:4px 7px;text-align:center;outline:none"
                 oninput="updateMult()">
               <span style="font-size:10px;color:var(--text-dim)">porcion(es)</span>
             </div>
-            <button class="bp" onclick="confirmAddFood()" style="height:42px;font-size:13px">&#10003; Agregar al registro del dia</button>
+
+            <!-- Action buttons -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <button class="bp" onclick="confirmAddFood(false)" style="height:42px;font-size:12px">&#10003; Agregar todo</button>
+              <button class="bs" onclick="confirmAddFood(true)" style="height:42px;font-size:12px">&#10003; Por separado</button>
+            </div>
           </div>
         </div>
         <div id="tab-lib" style="display:none">
@@ -733,43 +759,64 @@ async function analyzeFood(){
   document.getElementById('aiResult').classList.remove('visible');
 
   const PROMPT=`Eres un nutricionista experto con amplio conocimiento de la gastronomia costarricense y latinoamericana.
-Analiza el alimento descrito${selImg?' y la imagen adjunta':''} y devuelve UNICAMENTE JSON valido sin texto extra ni bloques de codigo.
-Formato exacto (valores numericos enteros):
-{"alimento":"Nombre del plato","porcion":"Porcion tipica (ej: 1 plato ~350g, 2 huevos ~120g)","pesoPorcion":350,"calorias":450,"proteinas":25,"carbohidratos":55,"grasas":12,"matchedLibrary":false,"nota":"Nota breve si aplica"}
-Reglas: estima la porcion TIPICA de Costa Rica/Latinoamerica. Si el usuario dice la cantidad usala. Se preciso.
+Analiza el alimento o plato${selImg?' y la imagen adjunta':''} y devuelve UNICAMENTE JSON valido sin texto extra ni backticks.
+
+Si es un plato con varios componentes (ej: casado, gallo pinto, arroz con pollo), desglosa CADA ingrediente o componente por separado.
+Si es un alimento simple (ej: "1 manzana", "cafe"), pon solo 1 ingrediente.
+
+Formato EXACTO:
+{"plato":"Nombre del plato completo","porcion":"Descripcion porcion tipica (ej: 1 plato ~600g)","pesoPorcion":600,"ingredientes":[{"nombre":"Arroz blanco","gramos":150,"calorias":195,"proteinas":3,"carbohidratos":42,"grasas":0},{"nombre":"Frijoles negros","gramos":100,"calorias":132,"proteinas":9,"carbohidratos":24,"grasas":1}],"matchedLibrary":false,"nota":"nota breve si aplica"}
+
+Reglas:
+- Estima gramos REALES de cada componente en una porcion tipica de Costa Rica
+- Los valores nutricionales deben ser para esos gramos especificos (no por 100g)
+- Si el usuario dice cantidades especificas, usalas
+- Se muy preciso con platos tipicos ticos: casado, gallo pinto, olla de carne, etc
 ${libCtx()}
-${text?'Descripcion: '+text:'Analiza la imagen.'}`;
+${text?'Descripcion: '+text:'Analiza la imagen adjunta.'}`;
 
   try{
     let messages;
     if(selImg){
-      // Use vision model with image
       messages=[{role:'user',content:[
         {type:'image_url',image_url:{url:`data:${selImg.mimeType};base64,${selImg.base64}`}},
         {type:'text',text:PROMPT}
       ]}];
-    } else {
+    }else{
       messages=[{role:'user',content:PROMPT}];
     }
-    const model = selImg ? GROQ_VISION_MODEL : GROQ_TEXT_MODEL;
+    const model=selImg?GROQ_VISION_MODEL:GROQ_TEXT_MODEL;
     const raw=await callGroq(messages,key,model);
     const m2=raw.match(/\{[\s\S]*\}/);
     if(!m2)throw new Error('La IA no devolvio JSON. Intenta describir el alimento con mas detalle.');
     const food=JSON.parse(m2[0]);
-    if(!food.alimento||food.calorias===undefined)throw new Error('Respuesta incompleta.');
-    pendingFood={...food};pendingBase={...food};
+    if(!food.plato&&!food.alimento)throw new Error('Respuesta incompleta.');
+
+    // Normalize: support both old {alimento} and new {plato+ingredientes} format
+    if(!food.ingredientes||!food.ingredientes.length){
+      // Single food - wrap it
+      food.plato=food.plato||food.alimento;
+      food.ingredientes=[{
+        nombre:food.plato,
+        gramos:food.pesoPorcion||100,
+        calorias:food.calorias||0,
+        proteinas:food.proteinas||0,
+        carbohidratos:food.carbohidratos||0,
+        grasas:food.grasas||0,
+      }];
+    }
+
+    pendingFood=food;pendingBase=JSON.parse(JSON.stringify(food));
     document.getElementById('aiMult').value=1;
-    document.getElementById('aiName').textContent=food.alimento;
+    document.getElementById('aiName').textContent=food.plato||food.alimento;
     document.getElementById('aiPT').textContent=food.pesoPorcion?`~${food.pesoPorcion}g`:'';
     document.getElementById('aiPD').textContent=food.porcion||'';
-    document.getElementById('aiCal').textContent=food.calorias;
-    document.getElementById('aiPro').textContent=`${food.proteinas||0}g`;
-    document.getElementById('aiCarb').textContent=`${food.carbohidratos||0}g`;
-    document.getElementById('aiFat').textContent=`${food.grasas||0}g`;
     const noteEl=document.getElementById('aiNote');
     if(food.matchedLibrary){noteEl.textContent='✓ Datos de tu biblioteca personal';noteEl.style.display='block';}
     else if(food.nota){noteEl.textContent='💡 '+food.nota;noteEl.style.display='block';}
     else{noteEl.style.display='none';}
+
+    renderIngBreakdown(food.ingredientes,1);
     document.getElementById('aiResult').classList.add('visible');
     showToast('¡Analisis listo! ✨','success');
   }catch(err){
@@ -781,44 +828,101 @@ ${text?'Descripcion: '+text:'Analiza la imagen.'}`;
   }
 }
 
-
-function updateMult(){
-  if(!pendingBase)return;
-  const mult=parseFloat(document.getElementById('aiMult').value)||1;
-  pendingFood={
-    ...pendingBase,
-    calorias:Math.round((pendingBase.calorias||0)*mult),
-    proteinas:Math.round((pendingBase.proteinas||0)*mult),
-    carbohidratos:Math.round((pendingBase.carbohidratos||0)*mult),
-    grasas:Math.round((pendingBase.grasas||0)*mult),
-    pesoPorcion:pendingBase.pesoPorcion?Math.round(pendingBase.pesoPorcion*mult):0,
-  };
-  document.getElementById('aiCal').textContent=pendingFood.calorias;
-  document.getElementById('aiPro').textContent=pendingFood.proteinas+'g';
-  document.getElementById('aiCarb').textContent=pendingFood.carbohidratos+'g';
-  document.getElementById('aiFat').textContent=pendingFood.grasas+'g';
-  if(pendingFood.pesoPorcion)document.getElementById('aiPT').textContent=`~${pendingFood.pesoPorcion}g`;
+function renderIngBreakdown(ings, mult){
+  const wrap=document.getElementById('aiIngList'); if(!wrap)return;
+  wrap.innerHTML=ings.map((ing,i)=>`
+    <div class="ing-break-row">
+      <input class="ing-cb" type="checkbox" id="icb_${i}" checked onchange="recalcAiTotals()">
+      <div class="ing-break-info">
+        <div class="ing-break-name">${esc(ing.nombre)}</div>
+        <div class="ing-break-mac">P:${Math.round((ing.proteinas||0)*mult)}g · C:${Math.round((ing.carbohidratos||0)*mult)}g · G:${Math.round((ing.grasas||0)*mult)}g</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div class="ing-break-cal">${Math.round((ing.calorias||0)*mult)}</div>
+        <div class="ing-break-g">${ing.gramos?Math.round(ing.gramos*mult)+'g':''}</div>
+      </div>
+    </div>`).join('');
+  recalcAiTotals();
 }
 
-// THE KEY FUNCTION - fixed and complete
-function confirmAddFood(){
+function recalcAiTotals(){
+  if(!pendingFood||!pendingFood.ingredientes)return;
+  const mult=parseFloat(document.getElementById('aiMult')?.value)||1;
+  let cal=0,p=0,c=0,f=0;
+  pendingFood.ingredientes.forEach((ing,i)=>{
+    const cb=document.getElementById('icb_'+i);
+    if(cb&&cb.checked){
+      cal+=Math.round((ing.calorias||0)*mult);
+      p+=Math.round((ing.proteinas||0)*mult);
+      c+=Math.round((ing.carbohidratos||0)*mult);
+      f+=Math.round((ing.grasas||0)*mult);
+    }
+  });
+  document.getElementById('aiCal').textContent=cal;
+  document.getElementById('aiPro').textContent=p+'g';
+  document.getElementById('aiCarb').textContent=c+'g';
+  document.getElementById('aiFat').textContent=f+'g';
+}
+
+
+function updateMult(){
+  if(!pendingBase||!pendingBase.ingredientes)return;
+  const mult=parseFloat(document.getElementById('aiMult').value)||1;
+  // Update displayed grams on portion tag
+  if(pendingBase.pesoPorcion){
+    document.getElementById('aiPT').textContent=`~${Math.round(pendingBase.pesoPorcion*mult)}g`;
+  }
+  // Re-render ingredient rows with new multiplier
+  renderIngBreakdown(pendingBase.ingredientes, mult);
+}
+
+// confirmAddFood: separado=true adds each ingredient separately
+function confirmAddFood(separado){
   if(!pendingFood){showToast('Analiza un alimento primero','warn');return;}
   const mult=parseFloat(document.getElementById('aiMult').value)||1;
-  const portLabel=pendingBase?.porcion?(mult!==1?`${mult}x ${pendingBase.porcion}`:pendingBase.porcion):'';
-  addEntry({
-    name:pendingFood.alimento,
-    calorias:pendingFood.calorias,
-    proteinas:pendingFood.proteinas,
-    carbohidratos:pendingFood.carbohidratos,
-    grasas:pendingFood.grasas,
-    porcion:portLabel,
+  const ings=pendingFood.ingredientes||[];
+
+  // Get selected ingredients
+  const selected=ings.filter((_,i)=>{
+    const cb=document.getElementById('icb_'+i);
+    return !cb||cb.checked; // if no checkbox, include all
   });
+  if(!selected.length){showToast('Selecciona al menos un ingrediente','warn');return;}
+
+  if(separado){
+    // Add each ingredient as a separate food entry
+    selected.forEach(ing=>{
+      addEntry({
+        name:`${esc(ing.nombre)}${mult!==1?' (x'+mult+')':''}`,
+        calorias:Math.round((ing.calorias||0)*mult),
+        proteinas:Math.round((ing.proteinas||0)*mult),
+        carbohidratos:Math.round((ing.carbohidratos||0)*mult),
+        grasas:Math.round((ing.grasas||0)*mult),
+        porcion:ing.gramos?`${Math.round(ing.gramos*mult)}g`:'',
+      });
+    });
+    showToast(`${selected.length} ingredientes agregados ✓`,'success');
+  }else{
+    // Add all selected as one combined entry
+    const totCal=selected.reduce((s,i)=>s+Math.round((i.calorias||0)*mult),0);
+    const totP  =selected.reduce((s,i)=>s+Math.round((i.proteinas||0)*mult),0);
+    const totC  =selected.reduce((s,i)=>s+Math.round((i.carbohidratos||0)*mult),0);
+    const totF  =selected.reduce((s,i)=>s+Math.round((i.grasas||0)*mult),0);
+    const portLabel=pendingBase?.porcion?(mult!==1?`${mult}x ${pendingBase.porcion}`:pendingBase.porcion):'';
+    const dishName=pendingFood.plato||pendingFood.alimento||'Plato';
+    addEntry({
+      name:selected.length<ings.length?`${dishName} (parcial)`:dishName,
+      calorias:totCal,proteinas:totP,carbohidratos:totC,grasas:totF,
+      porcion:portLabel,
+    });
+    showToast('¡Plato registrado! 🎯','success');
+  }
+
   pendingFood=null;pendingBase=null;
   document.getElementById('aiResult').classList.remove('visible');
   document.getElementById('foodInput').value='';
   clearImg();
   showPage('home');
-  showToast('¡Alimento registrado! 🎯','success');
 }
 
 function handleImg(e){
