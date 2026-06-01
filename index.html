@@ -814,6 +814,212 @@ function confirmQuickRecipe(id){
 }
 
 
+
+// ── RECIPE INGREDIENT PICKERS ──
+
+// Pick from library
+function openIngLibPicker(){
+  // Save current modal content to restore after
+  const currentContent = document.getElementById('ms').innerHTML;
+  openModal(`
+    <div class="mt">Elegir de biblioteca<div class="mc" onclick="restoreRecipeModal()">&#8592; Volver</div></div>
+    <div style="display:flex;gap:7px;margin-bottom:10px">
+      <input class="fc" id="ilpQ" placeholder="Buscar alimento..." style="flex:1" oninput="renderIngLibPicker()">
+    </div>
+    <div id="ilpList"></div>
+  `);
+  window._prevRecipeModal = currentContent;
+  renderIngLibPicker();
+}
+
+function renderIngLibPicker(){
+  const q=(document.getElementById('ilpQ')?.value||'').toLowerCase();
+  const lib=S.getLib().filter(i=>i.name.toLowerCase().includes(q)).slice(0,30);
+  const wrap=document.getElementById('ilpList');if(!wrap)return;
+  if(!lib.length){wrap.innerHTML='<div style="font-size:11px;color:var(--text-dim);padding:8px 0">Sin resultados.</div>';return;}
+  wrap.innerHTML=lib.map(item=>`
+    <div class="lib-item" style="margin-bottom:6px">
+      <div style="font-size:18px;flex-shrink:0">${item.custom?'⭐':'🥗'}</div>
+      <div class="lib-info">
+        <div class="lib-name">${esc(item.name)}</div>
+        <div class="lib-mac">${item.calorias}kcal P:${item.proteinas}g C:${item.carbohidratos}g G:${item.grasas}g <span style="font-size:9px;color:var(--text-dim)">/100g</span></div>
+      </div>
+      <button onclick="pickLibIngredient('${item.id}')"
+        style="background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%);border:none;border-radius:8px;padding:6px 12px;font-family:var(--font-head);font-size:11px;font-weight:700;color:#000;cursor:pointer;flex-shrink:0">
+        Agregar
+      </button>
+    </div>`).join('');
+}
+
+function pickLibIngredient(libId){
+  const item=S.getLib().find(i=>i.id===libId);if(!item)return;
+  // Restore recipe modal first
+  restoreRecipeModal();
+  // Then add the ingredient with library macros (per 100g, user will adjust grams)
+  ingRows.push({
+    id:uid('i'),
+    name:item.name,
+    grams:100,
+    cal100:item.calorias,
+    p100:item.proteinas,
+    c100:item.carbohidratos,
+    f100:item.grasas,
+  });
+  renderIngB();
+  showToast(`${item.name} agregado ✓`,'success');
+}
+
+// Barcode picker for recipe ingredients
+function openIngBarcode(){
+  const currentContent = document.getElementById('ms').innerHTML;
+  window._prevRecipeModal = currentContent;
+  openModal(`
+    <div class="mt">Ingrediente por c&#243;digo<div class="mc" onclick="restoreRecipeModal()">&#8592; Volver</div></div>
+    <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
+      Escanea o escribe el c&#243;digo de barras del ingrediente para obtener sus datos nutricionales.
+    </div>
+    <div class="barcode-area" onclick="startIngBarcode()" style="padding:14px;margin-bottom:10px">
+      <div style="font-size:28px;margin-bottom:4px">&#128247;</div>
+      <div style="font-family:var(--font-head);font-size:12px;font-weight:700;color:var(--accent)">Escanear con c&#225;mara</div>
+    </div>
+    <div style="text-align:center;font-size:10px;color:var(--text-dim);margin-bottom:8px">&#8212; o escribe el c&#243;digo &#8212;</div>
+    <div style="display:flex;gap:7px;margin-bottom:10px">
+      <input class="fc" id="ibcCode" type="number" placeholder="Ej: 7501234567890" style="flex:1">
+      <button class="bp" style="width:auto;padding:0 14px;font-size:12px" onclick="lookupIngBarcode()">Buscar</button>
+    </div>
+    <div id="ibcResult"></div>
+  `);
+}
+
+async function startIngBarcode(){
+  const key=S.getKey();
+  if(!key){showToast('Necesitas API Key de Groq en Ajustes','error');return;}
+  const input=document.createElement('input');
+  input.type='file';input.accept='image/*';input.capture='environment';
+  input.onchange=async(e)=>{
+    const file=e.target.files[0];if(!file)return;
+    showToast('Leyendo c\u00f3digo...','');
+    const reader=new FileReader();
+    reader.onload=async ev=>{
+      try{
+        const raw=await callGroq([{role:'user',content:[
+          {type:'image_url',image_url:{url:`data:${file.type};base64,${ev.target.result.split(',')[1]}`}},
+          {type:'text',text:'Lee el codigo de barras EAN/UPC y devuelve SOLO el numero. Si no hay codigo devuelve: none'}
+        ]}],key,GROQ_VISION_MODEL);
+        const code=raw.trim().replace(/\D/g,'');
+        if(!code||code.length<7){showToast('No se detect\u00f3 c\u00f3digo','error');return;}
+        const el=document.getElementById('ibcCode');if(el)el.value=code;
+        lookupIngBarcode();
+      }catch(err){showToast('Error: '+err.message.slice(0,50),'error');}
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+async function lookupIngBarcode(){
+  const code=(document.getElementById('ibcCode')?.value||'').trim();
+  if(!code){showToast('Ingresa un c\u00f3digo','warn');return;}
+  const wrap=document.getElementById('ibcResult');if(!wrap)return;
+  wrap.innerHTML='<div style="font-size:11px;color:var(--text-dim);padding:8px 0">Buscando en Open Food Facts...</div>';
+  try{
+    const res=await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`);
+    const data=await res.json();
+    if(data.status!==1||!data.product){
+      wrap.innerHTML=`<div style="font-size:11px;color:var(--text-dim);padding:6px 0">Producto no encontrado.<br>
+        <button onclick="addIngManualFromBC('${code}')" class="bs" style="height:34px;font-size:11px;margin-top:8px">+ Agregar manualmente</button>
+      </div>`;
+      return;
+    }
+    const p=data.product,n=p.nutriments||{};
+    const name=p.product_name||p.generic_name||'Producto';
+    const cal =Math.round(n['energy-kcal_100g']||0);
+    const pro =Math.round(n['proteins_100g']||0);
+    const carb=Math.round(n['carbohydrates_100g']||0);
+    const fat =Math.round(n['fat_100g']||0);
+    const brand=p.brands?` · ${p.brands.split(',')[0]}`:'';
+    wrap.innerHTML=`
+      <div class="lib-item" style="margin-bottom:12px">
+        <div style="font-size:22px">📦</div>
+        <div class="lib-info">
+          <div class="lib-name">${esc(name)}${esc(brand)}</div>
+          <div class="lib-mac">${cal}kcal P:${pro}g C:${carb}g G:${fat}g <span style="font-size:9px;color:var(--text-dim)">/100g</span></div>
+        </div>
+      </div>
+      <div class="fg"><label class="fl">Gramos en la receta</label>
+        <input class="fc" id="ibcGrams" type="number" value="100" min="1">
+      </div>
+      <button class="bp" onclick="addIngFromBarcode('${esc(name)}',${cal},${pro},${carb},${fat})" style="height:40px;font-size:12px">
+        &#10003; Agregar a la receta
+      </button>`;
+  }catch(e){
+    wrap.innerHTML='<div style="font-size:11px;color:var(--danger)">Error de red.</div>';
+  }
+}
+
+function addIngFromBarcode(name,cal100,p100,c100,f100){
+  const g=parseFloat(document.getElementById('ibcGrams')?.value)||100;
+  ingRows.push({id:uid('i'),name,grams:g,cal100,p100,c100,f100});
+  // Also save to library for future use
+  const lib=S.getLib();
+  if(!lib.find(i=>i.name.toLowerCase()===name.toLowerCase())){
+    lib.push({id:uid('li'),name,calorias:cal100,proteinas:p100,carbohidratos:c100,grasas:f100,custom:true,useCount:0,lastUsed:''});
+    S.setLib(lib);buildDS();
+  }
+  restoreRecipeModal();
+  renderIngB();
+  showToast(`${name} agregado ✓`,'success');
+}
+
+function addIngManualFromBC(code){
+  openModal(`
+    <div class="mt">Agregar ingrediente<div class="mc" onclick="closeModal()">&#10005;</div></div>
+    <div style="font-size:10px;color:var(--text-dim);margin-bottom:12px">C&#243;digo: ${esc(code)} · Valores por 100g</div>
+    <div class="fg"><label class="fl">Nombre</label><input class="fc" id="ibmN" type="text" placeholder="Nombre del ingrediente"></div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Calorias/100g</label><input class="fc" id="ibmC" type="number" placeholder="kcal"></div>
+      <div class="fg"><label class="fl">Gramos en receta</label><input class="fc" id="ibmG" type="number" value="100" min="1"></div>
+    </div>
+    <div class="fr3">
+      <div class="fg"><label class="fl">Prot</label><input class="fc" id="ibmP" type="number" placeholder="0"></div>
+      <div class="fg"><label class="fl">Carb</label><input class="fc" id="ibmCb" type="number" placeholder="0"></div>
+      <div class="fg"><label class="fl">Gras</label><input class="fc" id="ibmF" type="number" placeholder="0"></div>
+    </div>
+    <button class="bp" onclick="saveIngManualFromBC()" style="height:40px;font-size:12px">&#10003; Agregar a la receta</button>
+  `);
+}
+
+function saveIngManualFromBC(){
+  const name=(document.getElementById('ibmN')?.value||'').trim();
+  const cal =parseFloat(document.getElementById('ibmC')?.value)||0;
+  const g   =parseFloat(document.getElementById('ibmG')?.value)||100;
+  const p   =parseFloat(document.getElementById('ibmP')?.value)||0;
+  const cb  =parseFloat(document.getElementById('ibmCb')?.value)||0;
+  const f   =parseFloat(document.getElementById('ibmF')?.value)||0;
+  if(!name||!cal){showToast('Nombre y calorias son obligatorios','warn');return;}
+  ingRows.push({id:uid('i'),name,grams:g,cal100:cal,p100:p,c100:cb,f100:f});
+  const lib=S.getLib();
+  if(!lib.find(i=>i.name.toLowerCase()===name.toLowerCase())){
+    lib.push({id:uid('li'),name,calorias:cal,proteinas:p,carbohidratos:cb,grasas:f,custom:true,useCount:0,lastUsed:''});
+    S.setLib(lib);buildDS();
+  }
+  restoreRecipeModal();
+  renderIngB();
+  showToast(`${name} agregado ✓`,'success');
+}
+
+function restoreRecipeModal(){
+  if(window._prevRecipeModal){
+    document.getElementById('ms').innerHTML=window._prevRecipeModal;
+    window._prevRecipeModal=null;
+    buildDS();
+    renderIngB();
+  }else{
+    closeModal();
+  }
+}
+
+
 // ── LIBRARY MANAGEMENT ──
 function restoreBaseLib(){
   const lib=S.getLib();
@@ -1349,7 +1555,11 @@ function openNewRecipe(){
     <div class="ct" style="padding:2px 0 8px;margin:0">Ingredientes</div>
     <div style="font-size:10px;color:var(--text-dim);margin-bottom:8px">Escribe el nombre exacto de un alimento de tu biblioteca para autocompletar sus macros.</div>
     <div id="ingBW"></div>
-    <button class="bs" onclick="addIng()" style="margin-bottom:12px;height:38px;font-size:11px">+ Agregar ingrediente</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px">
+      <button class="bs" onclick="addIng()" style="height:38px;font-size:11px">+ Manual</button>
+      <button onclick="openIngLibPicker()" style="height:38px;font-size:11px;background:rgba(0,255,157,.1);border:1px solid rgba(0,255,157,.3);border-radius:var(--radius-sm);font-family:var(--font-head);font-weight:700;color:var(--accent2);cursor:pointer">&#128218; Biblioteca</button>
+      <button onclick="openIngBarcode()" style="height:38px;font-size:11px;background:rgba(199,125,255,.1);border:1px solid rgba(199,125,255,.3);border-radius:var(--radius-sm);font-family:var(--font-head);font-weight:700;color:var(--accent4);cursor:pointer">&#9643; C&#243;digo</button>
+    </div>
     <div class="ct" style="padding:2px 0 8px;margin:0">🤖 Crear con Groq AI</div>
     <div style="display:flex;gap:7px;margin-bottom:12px">
       <input class="fc" id="aiRP" placeholder="Ej: Sopa de pollo con verduras, 4 porciones" style="flex:1;font-size:12px">
