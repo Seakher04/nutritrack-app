@@ -503,6 +503,10 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
           <div class="srow"><span class="sl">Grasas</span><span class="sv" style="color:var(--fat-col)" id="tF">-</span></div>
         </div>
         <button class="bp" onclick="saveSettings()" style="margin-bottom:10px">Calcular y Guardar</button>
+        <div style="margin-bottom:12px;display:flex;gap:7px">
+          <button onclick="restoreBaseLib()" style="flex:1;background:rgba(199,125,255,.1);border:1px solid rgba(199,125,255,.3);border-radius:8px;padding:9px;font-family:var(--font-head);font-size:11px;font-weight:700;color:var(--accent4);cursor:pointer">&#8635; Restaurar biblioteca base</button>
+          <button onclick="clearCustomLib()" style="flex:1;background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.2);border-radius:8px;padding:9px;font-family:var(--font-head);font-size:11px;font-weight:700;color:var(--danger);cursor:pointer">&#128465; Borrar mis alimentos</button>
+        </div>
         <div style="text-align:center;font-size:10px;color:var(--text-dim);line-height:1.8;padding:6px 0 4px">NutriTrack AI · Datos 100% locales · Sin backend · Sin anuncios<br><span style="color:var(--accent)">Powered by Groq AI (Llama) + Open Food Facts</span></div>
       </div>
       <div class="sp"></div>
@@ -697,6 +701,120 @@ function bumpLib(name){
   if(item){item.useCount=(item.useCount||0)+1;item.lastUsed=todayStr();S.setLib(lib);}
 }
 
+
+// ── LIBRARY MANAGEMENT ──
+function restoreBaseLib(){
+  const lib=S.getLib();
+  const customItems=lib.filter(i=>i.custom);
+  // Re-add all base items that were deleted
+  const baseIds=BL.map(i=>i.id);
+  const existingBase=lib.filter(i=>baseIds.includes(i.id));
+  const missingBase=BL.filter(b=>!existingBase.find(e=>e.id===b.id));
+  if(!missingBase.length){showToast('La biblioteca base ya está completa','warn');return;}
+  const restored=[...customItems,...BL];
+  S.setLib(restored);
+  renderLib();
+  buildDS();
+  showToast(`${missingBase.length} alimentos base restaurados ✓`,'success');
+}
+
+function clearCustomLib(){
+  const lib=S.getLib();
+  const baseIds=BL.map(i=>i.id);
+  const remaining=lib.filter(i=>baseIds.includes(i.id));// keep only base
+  S.setLib(remaining);
+  renderLib();
+  buildDS();
+  showToast('Alimentos personalizados eliminados','success');
+}
+
+// ── BARCODE NAME SEARCH ──
+async function searchBCByName(){
+  const q=(document.getElementById('bcNameQ')?.value||'').trim();
+  if(!q){showToast('Escribe un nombre para buscar','warn');return;}
+  const wrap=document.getElementById('bcNameResults');
+  if(!wrap)return;
+  wrap.innerHTML='<div style="font-size:11px;color:var(--text-dim);padding:8px 0">Buscando...</div>';
+  try{
+    const res=await fetch(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=5`);
+    const data=await res.json();
+    const products=(data.products||[]).filter(p=>p.product_name&&p.nutriments);
+    if(!products.length){
+      wrap.innerHTML='<div style="font-size:11px;color:var(--text-dim);padding:6px 0">Sin resultados. Intenta con otro nombre.</div>';
+      return;
+    }
+    wrap.innerHTML=products.map(p=>{
+      const n=p.nutriments||{};
+      const cal=Math.round(n['energy-kcal_100g']||0);
+      const pro=Math.round(n['proteins_100g']||0);
+      const carb=Math.round(n['carbohydrates_100g']||0);
+      const fat=Math.round(n['fat_100g']||0);
+      const name=p.product_name||(p.generic_name||'Producto');
+      const brand=p.brands?` · ${p.brands.split(',')[0]}`:'';
+      return `<div class="lib-item" style="margin-bottom:6px">
+        <div style="font-size:20px;flex-shrink:0">📦</div>
+        <div class="lib-info">
+          <div class="lib-name">${esc(name)}${esc(brand)}</div>
+          <div class="lib-mac">${cal}kcal P:${pro}g C:${carb}g G:${fat}g <span style="font-size:9px;color:var(--text-dim)">/100g</span></div>
+        </div>
+        <div class="lib-act">
+          <div class="lbtn add" onclick="addBC(${cal},${pro},${carb},${fat},'${esc(name)}')">+</div>
+          <div class="lbtn edt" onclick="saveBC(${cal},${pro},${carb},${fat},'${esc(name)}')">💾</div>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    wrap.innerHTML='<div style="font-size:11px;color:var(--danger)">Error de red.</div>';
+  }
+}
+
+function openAddFromBarcode(code){
+  openModal(`
+    <div class="mt">Agregar producto<div class="mc" onclick="closeModal()">✕</div></div>
+    <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px">Codigo: ${esc(code)} · Valores por 100g</div>
+    <div class="fg"><label class="fl">Nombre del producto</label>
+      <input class="fc" id="bfName" type="text" placeholder="Ej: Leche Dos Pinos Entera">
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Calorias/100g</label><input class="fc" id="bfCal" type="number" placeholder="kcal"></div>
+      <div class="fg"><label class="fl">Proteinas (g)</label><input class="fc" id="bfPro" type="number" placeholder="0"></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Carbos (g)</label><input class="fc" id="bfCarb" type="number" placeholder="0"></div>
+      <div class="fg"><label class="fl">Grasas (g)</label><input class="fc" id="bfFat" type="number" placeholder="0"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+      <button class="bp" onclick="saveAndAddFromBC()" style="height:40px;font-size:12px">+ Agregar al dia</button>
+      <button class="bs" onclick="saveOnlyFromBC()" style="height:40px;font-size:12px">💾 Solo guardar</button>
+    </div>
+  `);
+}
+
+function saveAndAddFromBC(){
+  const name=document.getElementById('bfName').value.trim();
+  const cal=parseFloat(document.getElementById('bfCal').value)||0;
+  if(!name||!cal){showToast('Nombre y calorias son obligatorios','warn');return;}
+  const pro=parseFloat(document.getElementById('bfPro').value)||0;
+  const carb=parseFloat(document.getElementById('bfCarb').value)||0;
+  const fat=parseFloat(document.getElementById('bfFat').value)||0;
+  saveBC(cal,pro,carb,fat,name);
+  addBC(cal,pro,carb,fat,name);
+  closeModal();
+}
+function saveOnlyFromBC(){
+  const name=document.getElementById('bfName').value.trim();
+  const cal=parseFloat(document.getElementById('bfCal').value)||0;
+  if(!name||!cal){showToast('Nombre y calorias son obligatorios','warn');return;}
+  const pro=parseFloat(document.getElementById('bfPro').value)||0;
+  const carb=parseFloat(document.getElementById('bfCarb').value)||0;
+  const fat=parseFloat(document.getElementById('bfFat').value)||0;
+  saveBC(cal,pro,carb,fat,name);
+  closeModal();
+  showToast(`"${name}" guardado en biblioteca`,'success');
+}
+
+// ── IMPROVE libCtx to show it's being used ──
+
 // ── GROQ AI ──
 // ── GROQ CONFIG ──
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -745,10 +863,14 @@ async function callGroq(messages, key, model) {
 }
 
 function libCtx(){
-  const custom=S.getLib().filter(i=>i.custom).slice(0,20);
-  if(!custom.length)return'';
-  return'\n\nBiblioteca personal del usuario (usa estos datos si el alimento coincide):\n'+
-    custom.map(i=>`- ${i.name}: ${i.calorias}kcal/100g P:${i.proteinas}g C:${i.carbohidratos}g G:${i.grasas}g`).join('\n');
+  const lib=S.getLib();
+  const custom=lib.filter(i=>i.custom);
+  const frequent=lib.filter(i=>!i.custom&&i.useCount>0).sort((a,b)=>b.useCount-a.useCount).slice(0,10);
+  const items=[...custom,...frequent].slice(0,25);
+  if(!items.length)return'';
+  const customPart=custom.length?`\nAlimentos PROPIOS del usuario (usa ESTOS valores si coinciden, tienen prioridad):\n`+custom.map(i=>`- ${i.name}: ${i.calorias}kcal P:${i.proteinas}g C:${i.carbohidratos}g G:${i.grasas}g`).join('\n'):'';
+  const freqPart=frequent.length?`\nAlimentos frecuentes del usuario:\n`+frequent.map(i=>`- ${i.name}: ${i.calorias}kcal P:${i.proteinas}g C:${i.carbohidratos}g G:${i.grasas}g`).join('\n'):'';
+  return customPart+freqPart;
 }
 
 async function analyzeFood(){
@@ -992,11 +1114,12 @@ function renderLib(){
       <div style="font-size:20px;flex-shrink:0">${item.custom?'⭐':'🥗'}</div>
       <div class="lib-info"><div class="lib-name">${esc(item.name)}</div>
         <div class="lib-mac">${item.calorias}kcal P:${item.proteinas}g C:${item.carbohidratos}g G:${item.grasas}g <span style="font-size:9px;color:var(--text-dim)">/100g</span></div></div>
-      ${item.custom?'<span class="badge bc">Mio</span>':''}
+      ${item.custom?'<span class="badge bc">M&#237;o</span>':''}
       ${item.useCount>2?`<span class="badge bf">x${item.useCount}</span>`:''}
       <div class="lib-act">
         <div class="lbtn add" onclick="openServe('${item.id}')">+</div>
-        ${item.custom?`<div class="lbtn edt" onclick="openEditFood('${item.id}')">✏</div><div class="lbtn del" onclick="delLib('${item.id}')">✕</div>`:''}
+        <div class="lbtn edt" onclick="openEditFood('${item.id}')">✏</div>
+        <div class="lbtn del" onclick="delLib('${item.id}')">✕</div>
       </div>
     </div>`).join('');
 }
@@ -1271,7 +1394,25 @@ async function lookupBC(){
   try{
     const res=await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`);
     const data=await res.json();
-    if(data.status!==1||!data.product){w.innerHTML='<div class="empty"><span class="emoji">🔍</span>Producto no encontrado.<br>Puedes agregarlo manualmente.</div>';return;}
+    if(data.status!==1||!data.product){
+      w.innerHTML=`<div class="empty" style="padding:16px">
+        <span class="emoji">🔍</span>
+        <b style="color:var(--text)">Producto no encontrado en Open Food Facts</b><br>
+        <span style="font-size:11px">Codigo: ${code}</span>
+      </div>
+      <div style="margin-top:8px">
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">Busca por nombre del producto:</div>
+        <div style="display:flex;gap:7px;margin-bottom:8px">
+          <input class="fc" id="bcNameQ" type="text" placeholder="Ej: Coca Cola, Gallo Pinto Dos Pinos..." style="flex:1;font-size:12px">
+          <button class="bp" style="width:auto;padding:0 12px;font-size:12px" onclick="searchBCByName()">Buscar</button>
+        </div>
+        <div id="bcNameResults"></div>
+        <div class="div"></div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">O agregar manualmente:</div>
+        <button class="bs" onclick="openAddFromBarcode('${code}')" style="height:38px;font-size:12px">+ Agregar manualmente</button>
+      </div>`;
+      return;
+    }
     const p=data.product,n=p.nutriments||{};
     const name=p.product_name||p.generic_name||'Producto escaneado';
     const cal=Math.round(n['energy-kcal_100g']||n['energy-kcal']||0);
