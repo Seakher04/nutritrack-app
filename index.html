@@ -261,6 +261,7 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
 .fedt{width:26px;height:26px;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.2);border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--accent);font-size:12px;flex-shrink:0;-webkit-tap-highlight-color:transparent}
 .fedt:active{background:rgba(0,212,255,.2);transform:scale(.88)}
 </style>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body>
 
@@ -449,12 +450,43 @@ html,body{height:100%;background:var(--bg-deep);color:var(--text);font-family:va
     </div>
 
     <div class="page" id="page-barcode">
-      <div class="sh"><div class="st">Codigo de barras</div></div>
-      <div class="ss">Escanea productos empacados usando Open Food Facts — base de datos mundial gratuita.</div>
+      <div class="sh"><div class="st">C&#243;digo de barras</div></div>
+      <div class="ss">Escaneo en vivo o manual. Busca en Open Food Facts, USDA y tu biblioteca personal.</div>
       <div style="padding:0 12px">
-        <div class="bca" onclick="startBarcode()"><div style="font-size:36px;margin-bottom:8px">&#128247;</div><div style="font-family:var(--font-head);font-size:14px;font-weight:700;color:var(--accent);margin-bottom:4px">Escanear con camara</div><div style="font-size:11px;color:var(--text-dim)">La IA lee el codigo automaticamente</div></div>
-        <div style="text-align:center;font-size:11px;color:var(--text-dim);margin-bottom:10px">&#8212; o ingresa el codigo manualmente &#8212;</div>
-        <div style="display:flex;gap:7px;margin-bottom:10px"><input class="fc" id="bcInput" type="number" placeholder="Ej: 7501234567890" style="flex:1"><button class="bp" style="width:auto;padding:0 14px;font-size:12px" onclick="lookupBC()">Buscar</button></div>
+
+        <!-- Live scanner -->
+        <div id="bcScannerWrap" style="display:none;margin-bottom:12px">
+          <div style="position:relative;border-radius:var(--radius);overflow:hidden;background:#000;aspect-ratio:1">
+            <div id="bcReader"></div>
+            <!-- scanning overlay -->
+            <div style="position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center">
+              <div style="width:65%;aspect-ratio:1;border:3px solid var(--accent);border-radius:12px;box-shadow:0 0 0 2000px rgba(0,0,0,.45)">
+                <div style="position:absolute;top:0;left:0;width:20px;height:20px;border-top:3px solid var(--accent2);border-left:3px solid var(--accent2);border-radius:4px 0 0 0"></div>
+                <div style="position:absolute;top:0;right:0;width:20px;height:20px;border-top:3px solid var(--accent2);border-right:3px solid var(--accent2);border-radius:0 4px 0 0"></div>
+                <div style="position:absolute;bottom:0;left:0;width:20px;height:20px;border-bottom:3px solid var(--accent2);border-left:3px solid var(--accent2);border-radius:0 0 0 4px"></div>
+                <div style="position:absolute;bottom:0;right:0;width:20px;height:20px;border-bottom:3px solid var(--accent2);border-right:3px solid var(--accent2);border-radius:0 0 4px 0"></div>
+              </div>
+            </div>
+          </div>
+          <button onclick="stopBCScanner()" style="width:100%;margin-top:8px;background:rgba(255,71,87,.1);border:1px solid rgba(255,71,87,.3);border-radius:var(--radius-sm);height:40px;font-family:var(--font-head);font-size:12px;font-weight:700;color:var(--danger);cursor:pointer">&#9632; Detener c&#225;mara</button>
+        </div>
+
+        <!-- Scan button (when camera not active) -->
+        <div id="bcScanBtn">
+          <button onclick="startLiveScanner()" style="width:100%;background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%);border:none;border-radius:var(--radius);height:60px;font-family:var(--font-head);font-size:15px;font-weight:700;color:#000;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px">
+            <span style="font-size:26px">&#128247;</span> Escanear en vivo
+          </button>
+        </div>
+
+        <div style="text-align:center;font-size:11px;color:var(--text-dim);margin-bottom:8px">&#8212; o escribe el c&#243;digo manualmente &#8212;</div>
+        <div style="display:flex;gap:7px;margin-bottom:10px">
+          <input class="fc" id="bcInput" type="number" placeholder="Ej: 7501234567890" style="flex:1">
+          <button class="bp" style="width:auto;padding:0 14px;font-size:12px" onclick="lookupBC()">Buscar</button>
+        </div>
+
+        <!-- Custom barcodes library -->
+        <div id="bcCustomList"></div>
+
         <div id="bcResult"></div>
       </div>
       <div class="sp"></div>
@@ -577,6 +609,8 @@ const S = {
   setGoal:(v)=>S.set('nt_goal',v),
   getW:()=>S.get('nt_weights')||[],
   setW:(v)=>S.set('nt_weights',v),
+  getBarcodes:()=>S.get('nt_barcodes')||{},
+  setBarcodes:(v)=>S.set('nt_barcodes',v),
   getGym:()=>S.get('nt_gym')||{},
   setGym:(v)=>S.set('nt_gym',v),
   getWater:()=>S.get('nt_water')||{},
@@ -631,6 +665,7 @@ function fmtDate(s){
 }
 
 function showPage(n){
+  if(n !== 'barcode' && _scannerActive) stopBCScanner();
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+n).classList.add('active');
@@ -665,14 +700,14 @@ function renderDash(){
   const day=(S.getFoods()[curDate]||[]);
   document.getElementById('setupBanner').style.display=prof?'none':'block';
   const totCal=day.reduce((s,f)=>s+(f.calorias||0),0);
-  const circ=452,pct=prof?.calories>0?Math.min(totCal/prof.calories,1):0;
+  const circ=452,pct=(prof && prof.calories)>0?Math.min(totCal/prof.calories,1):0;
   const ring=document.getElementById('ringP');
   ring.style.strokeDashoffset=circ*(1-pct);
   ring.style.stroke=pct>1?'var(--danger)':pct>0.85?'var(--warn)':'var(--cal-col)';
   document.getElementById('rCals').textContent=Math.round(totCal);
   const rem=document.getElementById('rRem');
-  const r=(prof?.calories||0)-totCal;
-  if(!prof?.calories){rem.textContent='Configura tu meta';rem.style.color='var(--text-dim)';}
+  const r=((prof && prof.calories)||0)-totCal;
+  if(!(prof && prof.calories)){rem.textContent='Configura tu meta';rem.style.color='var(--text-dim)';}
   else if(r<0){rem.textContent=`+${Math.round(-r)} sobre meta`;rem.style.color='var(--danger)';}
   else{rem.textContent=`${Math.round(r)} restantes`;rem.style.color='var(--accent2)';}
   const totP=day.reduce((s,f)=>s+(f.proteinas||0),0);
@@ -686,12 +721,12 @@ function renderDash(){
   const fibEl=document.getElementById('fibCur');const sugEl=document.getElementById('sugCur');
   if(fibEl)fibEl.textContent=Math.round(totFib);
   if(sugEl)sugEl.textContent=Math.round(totSug);
-  document.getElementById('pGoal').textContent=prof?.protein?`/ ${prof.protein}g`:'/ --g';
-  document.getElementById('cGoal').textContent=prof?.carbs?`/ ${prof.carbs}g`:'/ --g';
-  document.getElementById('fGoal').textContent=prof?.fat?`/ ${prof.fat}g`:'/ --g';
-  document.getElementById('pBar').style.width=prof?.protein?`${Math.min(totP/prof.protein*100,100)}%`:'0%';
-  document.getElementById('cBar').style.width=prof?.carbs?`${Math.min(totC/prof.carbs*100,100)}%`:'0%';
-  document.getElementById('fBar').style.width=prof?.fat?`${Math.min(totF/prof.fat*100,100)}%`:'0%';
+  document.getElementById('pGoal').textContent=(prof && prof.protein)?`/ ${prof.protein}g`:'/ --g';
+  document.getElementById('cGoal').textContent=(prof && prof.carbs)?`/ ${prof.carbs}g`:'/ --g';
+  document.getElementById('fGoal').textContent=(prof && prof.fat)?`/ ${prof.fat}g`:'/ --g';
+  document.getElementById('pBar').style.width=(prof && prof.protein)?`${Math.min(totP/prof.protein*100,100)}%`:'0%';
+  document.getElementById('cBar').style.width=(prof && prof.carbs)?`${Math.min(totC/prof.carbs*100,100)}%`:'0%';
+  document.getElementById('fBar').style.width=(prof && prof.fat)?`${Math.min(totF/prof.fat*100,100)}%`:'0%';
   renderWater();
   const list=document.getElementById('flist');
   if(!day.length){list.innerHTML='<div class="empty"><span class="emoji">🍽️</span>Nada registrado todavía.<br>¡Agrega tu primera comida!</div>';return;}
@@ -701,7 +736,7 @@ function renderDash(){
       <div class="finfo">
         <div class="fname">${esc(f.name)}</div>
         <div class="fmacros">P:${f.proteinas||0}g · C:${f.carbohidratos||0}g · G:${f.grasas||0}g</div>
-        ${f.porcion?`<div class="fportion">📏 ${esc(f.porcion)}</div>`:''}
+        '+(f.porcion?'<div class="fportion">📏 '+esc(f.porcion)+'</div>':'')+'
       </div>
       <div class="fcals">${f.calorias}</div>
       <div class="fedt" onclick="openEditEntry('${f.id}')">✏</div>
@@ -797,7 +832,7 @@ function openQuickRecipePortions(id){
 
 function updateQRPreview(id){
   const rec=S.getRec().find(r=>r.id===id);if(!rec)return;
-  const n=parseFloat(document.getElementById('qrpInput')?.value)||1;
+  const n=parseFloat((document.getElementById('qrpInput')||{}).value)||1;
   const m=calcPort(rec,n);
   const el=document.getElementById('qrpPreview');
   if(el)el.textContent=`≈ ${m.cal} kcal · P:${m.p}g · C:${m.c}g · G:${m.f}g`;
@@ -805,7 +840,7 @@ function updateQRPreview(id){
 
 function confirmQuickRecipe(id){
   const rec=S.getRec().find(r=>r.id===id);if(!rec)return;
-  const n=parseFloat(document.getElementById('qrpInput')?.value)||1;
+  const n=parseFloat((document.getElementById('qrpInput')||{}).value)||1;
   const m=calcPort(rec,n);
   const label=`${n===Math.floor(n)?n:n.toFixed(2)} porcion${n!==1?'es':''}`;
   addEntry({name:rec.name,calorias:m.cal,proteinas:m.p,carbohidratos:m.c,grasas:m.f,emoji:rec.emoji,porcion:label});
@@ -833,7 +868,7 @@ function openIngLibPicker(){
 }
 
 function renderIngLibPicker(){
-  const q=(document.getElementById('ilpQ')?.value||'').toLowerCase();
+  const q=((document.getElementById('ilpQ')||{}).value||'').toLowerCase();
   const lib=S.getLib().filter(i=>i.name.toLowerCase().includes(q)).slice(0,30);
   const wrap=document.getElementById('ilpList');if(!wrap)return;
   if(!lib.length){wrap.innerHTML='<div style="font-size:11px;color:var(--text-dim);padding:8px 0">Sin resultados.</div>';return;}
@@ -842,7 +877,7 @@ function renderIngLibPicker(){
       <div style="font-size:18px;flex-shrink:0">${item.custom?'⭐':'🥗'}</div>
       <div class="lib-info">
         <div class="lib-name">${esc(item.name)}</div>
-        <div class="lib-mac">${item.calorias}kcal P:${item.proteinas}g C:${item.carbohidratos}g G:${item.grasas}g <span style="font-size:9px;color:var(--text-dim)">/100g</span></div>
+        <div class="lib-mac">${item.calPorcion||item.calorias}kcal P:${item.protPorcion||item.proteinas}g C:${item.carbPorcion||item.carbohidratos}g G:${item.grasPorcion||item.grasas}g · <span style="color:var(--accent);font-size:9px">${esc(item.porcionNombre||'100g')}</span></div>
       </div>
       <button onclick="pickLibIngredient('${item.id}')"
         style="background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%);border:none;border-radius:8px;padding:6px 12px;font-family:var(--font-head);font-size:11px;font-weight:700;color:#000;cursor:pointer;flex-shrink:0">
@@ -918,7 +953,7 @@ async function startIngBarcode(){
 }
 
 async function lookupIngBarcode(){
-  const code=(document.getElementById('ibcCode')?.value||'').trim();
+  const code=((document.getElementById('ibcCode')||{}).value||'').trim();
   if(!code){showToast('Ingresa un c\u00f3digo','warn');return;}
   const wrap=document.getElementById('ibcResult');if(!wrap)return;
   wrap.innerHTML='<div style="font-size:11px;color:var(--text-dim);padding:8px 0">Buscando en Open Food Facts...</div>';
@@ -958,7 +993,7 @@ async function lookupIngBarcode(){
 }
 
 function addIngFromBarcode(name,cal100,p100,c100,f100){
-  const g=parseFloat(document.getElementById('ibcGrams')?.value)||100;
+  const g=parseFloat((document.getElementById('ibcGrams')||{}).value)||100;
   ingRows.push({id:uid('i'),name,grams:g,cal100,p100,c100,f100});
   // Also save to library for future use
   const lib=S.getLib();
@@ -990,12 +1025,12 @@ function addIngManualFromBC(code){
 }
 
 function saveIngManualFromBC(){
-  const name=(document.getElementById('ibmN')?.value||'').trim();
-  const cal =parseFloat(document.getElementById('ibmC')?.value)||0;
-  const g   =parseFloat(document.getElementById('ibmG')?.value)||100;
-  const p   =parseFloat(document.getElementById('ibmP')?.value)||0;
-  const cb  =parseFloat(document.getElementById('ibmCb')?.value)||0;
-  const f   =parseFloat(document.getElementById('ibmF')?.value)||0;
+  const name=((document.getElementById('ibmN')||{}).value||'').trim();
+  const cal =parseFloat((document.getElementById('ibmC')||{}).value)||0;
+  const g   =parseFloat((document.getElementById('ibmG')||{}).value)||100;
+  const p   =parseFloat((document.getElementById('ibmP')||{}).value)||0;
+  const cb  =parseFloat((document.getElementById('ibmCb')||{}).value)||0;
+  const f   =parseFloat((document.getElementById('ibmF')||{}).value)||0;
   if(!name||!cal){showToast('Nombre y calorias son obligatorios','warn');return;}
   ingRows.push({id:uid('i'),name,grams:g,cal100:cal,p100:p,c100:cb,f100:f});
   const lib=S.getLib();
@@ -1019,6 +1054,160 @@ function restoreRecipeModal(){
   }
 }
 
+
+
+
+// ══════════════════════════════
+//  LIVE BARCODE SCANNER
+// ══════════════════════════════
+let _scanner = null;
+let _scannerActive = false;
+
+function startLiveScanner(){
+  if(_scannerActive)return;
+  const btnWrap = document.getElementById('bcScanBtn');
+  const scanWrap = document.getElementById('bcScannerWrap');
+  if(btnWrap) btnWrap.style.display='none';
+  if(scanWrap) scanWrap.style.display='block';
+
+  // Clear previous reader div
+  const reader = document.getElementById('bcReader');
+  if(reader) reader.innerHTML='';
+
+  _scanner = new Html5Qrcode('bcReader');
+  _scannerActive = true;
+
+  const config = {
+    fps: 10,
+    qrbox: { width: 250, height: 250 },
+    aspectRatio: 1.0,
+    supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+    rememberLastUsedCamera: true,
+  };
+
+  _scanner.start(
+    { facingMode: 'environment' },
+    config,
+    (code) => {
+      // Barcode detected!
+      stopBCScanner();
+      const input = document.getElementById('bcInput');
+      if(input) input.value = code;
+      showToast('Código detectado: '+code,'success');
+      lookupBC();
+    },
+    (err) => { /* scanning... */ }
+  ).catch(err => {
+    showToast('Error de cámara: '+err,'error');
+    stopBCScanner();
+  });
+}
+
+function stopBCScanner(){
+  if(_scanner && _scannerActive){
+    _scanner.stop().catch(()=>{});
+    _scanner = null;
+  }
+  _scannerActive = false;
+  const btnWrap = document.getElementById('bcScanBtn');
+  const scanWrap = document.getElementById('bcScannerWrap');
+  if(btnWrap) btnWrap.style.display='block';
+  if(scanWrap) scanWrap.style.display='none';
+  // Clear reader
+  const reader = document.getElementById('bcReader');
+  if(reader) reader.innerHTML='';
+}
+
+// Stop scanner when leaving page
+
+
+// ══════════════════════════════
+//  CUSTOM BARCODES LIBRARY
+// ══════════════════════════════
+function renderCustomBarcodes(){
+  const wrap = document.getElementById('bcCustomList'); if(!wrap)return;
+  const barcodes = S.getBarcodes();
+  const codes = Object.keys(barcodes);
+  if(!codes.length){ wrap.innerHTML=''; return; }
+  let html='<div class="ct" style="padding:4px 0 10px;margin:0">&#11088; Mis productos escaneados</div>';
+  codes.forEach(function(code){
+    const p=barcodes[code];
+    html+='<div class="lib-item" style="margin-bottom:6px">'
+      +'<div style="font-size:20px;flex-shrink:0">&#128230;</div>'
+      +'<div class="lib-info">'
+      +'<div class="lib-name">'+esc(p.name||'Producto')+'</div>'
+      +'<div class="lib-mac">'+(p.cal||0)+'kcal · <span style="color:var(--text-dim);font-size:9px">'+esc(p.porcionNombre||'100g')+'</span></div>'
+      +'<div style="font-size:9px;color:var(--text-dim)">Código: '+code+'</div>'
+      +'</div>'
+      +'<div class="lib-act">'
+      +'<div class="lbtn add" onclick="quickScanCode(this)" data-code="'+esc(code)+'" title="Buscar">+</div>'
+      +'<div class="lbtn del" onclick="deleteCustomBC(this)" data-code="'+esc(code)+'" title="Eliminar">✕</div>'
+      +'</div></div>';
+  });
+  html+='<div class="div"></div>';
+  wrap.innerHTML=html;
+}
+
+function deleteCustomBC(el){
+  const code=typeof el==='string'?el:el.getAttribute('data-code');
+  const barcodes = S.getBarcodes();
+  delete barcodes[code];
+  S.setBarcodes(barcodes);
+  renderCustomBarcodes();
+  showToast('Código eliminado','success');
+}
+
+// Also update openAddFromBarcode to save barcode when user manually adds
+
+// ── SCAN NUTRITION LABEL ──
+async function scanNutritionLabel(){
+  const key=S.getKey();
+  if(!key){showToast('Necesitas API Key de Groq en Ajustes','error');return;}
+  const input=document.createElement('input');
+  input.type='file';input.accept='image/*';input.capture='environment';
+  input.onchange=async(e)=>{
+    const file=e.target.files[0];if(!file)return;
+    showToast('Analizando tabla nutricional...','');
+    const reader=new FileReader();
+    reader.onload=async ev=>{
+      try{
+        const PROMPT=`Eres un experto en nutricion. Extrae TODOS los datos de esta tabla nutricional y devuelve SOLO JSON valido sin texto extra ni backticks.
+Formato exacto:
+{"nombre":"Nombre del producto","porcionNombre":"Porcion que indica la etiqueta (ej: 1 galleta, 30g, 1 taza)","porcionGramos":30,"calorias":120,"proteinas":3,"carbohidratos":20,"grasas":5,"fibra":2,"azucar":8,"grasaSat":2,"sodio":150,"colesterol":0,"potasio":80}
+- Usa los valores de la porcion indicada en la etiqueta (NO por 100g)
+- Si no aparece algun nutriente pon 0
+- El sodio en mg`;
+        const raw=await callGroq([{role:'user',content:[
+          {type:'image_url',image_url:{url:`data:${file.type};base64,${ev.target.result.split(',')[1]}`}},
+          {type:'text',text:PROMPT}
+        ]}],key,GROQ_VISION_MODEL);
+        const m=raw.match(/\{[\s\S]*\}/);
+        if(!m)throw new Error('No se pudo leer la tabla. Intenta con mejor iluminacion.');
+        const food=JSON.parse(m[0]);
+        // Fill form fields
+        const set=(id,val)=>{const el=document.getElementById(id);if(el&&val!==undefined)el.value=val;};
+        set('nN',  food.nombre);
+        set('nPN', food.porcionNombre||`${food.porcionGramos||100}g`);
+        set('nPG', food.porcionGramos||100);
+        set('nC',  food.calorias);
+        set('nP',  food.proteinas);
+        set('nCb', food.carbohidratos);
+        set('nF',  food.grasas);
+        set('nFib',food.fibra);
+        set('nSug',food.azucar);
+        set('nGS', food.grasaSat);
+        set('nSod',food.sodio);
+        set('nCol',food.colesterol);
+        set('nPot',food.potasio);
+        showToast('Tabla nutricional escaneada ✓','success');
+      }catch(err){
+        showToast('Error: '+err.message.slice(0,70),'error');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
 
 // ── LIBRARY MANAGEMENT ──
 function restoreBaseLib(){
@@ -1048,7 +1237,7 @@ function clearCustomLib(){
 
 // ── BARCODE NAME SEARCH ──
 async function searchBCByName(){
-  const q=(document.getElementById('bcNameQ')?.value||'').trim();
+  const q=((document.getElementById('bcNameQ')||{}).value||'').trim();
   if(!q){showToast('Escribe un nombre para buscar','warn');return;}
   const wrap=document.getElementById('bcNameResults');
   if(!wrap)return;
@@ -1115,9 +1304,16 @@ function saveAndAddFromBC(){
   const pro=parseFloat(document.getElementById('bfPro').value)||0;
   const carb=parseFloat(document.getElementById('bfCarb').value)||0;
   const fat=parseFloat(document.getElementById('bfFat').value)||0;
+  const pg=parseFloat((document.getElementById('bfG')||{}).value)||100;
+  const pn=(document.getElementById('bfPN')||{}).value||`${pg}g`;
+  const product={name,cal,pro,carb,fat,cal100:cal,pro100:pro,carb100:carb,fat100:fat,porcionNombre:pn,porcionGramos:pg};
+  // Save to barcode dictionary
+  const code=((document.getElementById('bcInput')||{}).value||'').trim();
+  if(code){const bc=S.getBarcodes();bc[code]={...product,_savedAt:todayStr()};S.setBarcodes(bc);renderCustomBarcodes();}
   saveBC(cal,pro,carb,fat,name);
   addBC(cal,pro,carb,fat,name);
   closeModal();
+  showToast(`${name} guardado y registrado ✓`,'success');
 }
 function saveOnlyFromBC(){
   const name=document.getElementById('bfName').value.trim();
@@ -1148,15 +1344,15 @@ async function callGroq(messages, key, model) {
   });
   const data = await res.json();
   if (!res.ok) {
-    const msg = data?.error?.message || '';
-    const code = data?.error?.code || res.status;
+    const msg = (data && data.error && data.error.message) || '';
+    const code = (data && data.error && data.error.code) || res.status;
     if (code === 401 || msg.toLowerCase().includes('invalid'))
       throw new Error('API Key de Groq invalida. Ve a console.groq.com y crea una nueva.');
     if (code === 429)
       throw new Error('Limite de Groq alcanzado. Espera un momento.');
     throw new Error(msg || 'Error ' + res.status);
   }
-  return data?.choices?.[0]?.message?.content || '';
+  return (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
 }
 
 
@@ -1169,15 +1365,47 @@ async function callGroq(messages, key, model) {
   });
   const data = await res.json();
   if (!res.ok) {
-    const code = data?.error?.code || res.status;
-    const msg  = data?.error?.message || '';
+    const code = (data && data.error && data.error.code) || res.status;
+    const msg  = (data && data.error && data.error.message) || '';
     if (code === 401 || msg.includes('invalid') || msg.includes('Invalid'))
       throw new Error('API Key de Groq invalida. Ve a console.groq.com y crea una nueva.');
     if (code === 429)
       throw new Error('Limite de Groq alcanzado. Espera un momento (14,400 requests/dia gratis).');
     throw new Error(msg || 'Error ' + res.status);
   }
-  return data?.choices?.[0]?.message?.content || '';
+  return (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+}
+
+// ── RECIPES ──
+function calcTot(r){
+  let cal=0,p=0,c=0,f=0;
+  for(const i of r.ingredients){const g=Number(i.grams)||0;cal+=(i.cal100/100)*g;p+=(i.p100/100)*g;c+=(i.c100/100)*g;f+=(i.f100/100)*g;}
+  return{cal:Math.round(cal),p:Math.round(p),c:Math.round(c),f:Math.round(f)};
+}
+function calcPort(r,n){const t=calcTot(r),s=Number(r.servings)||1,k=n/s;return{cal:Math.round(t.cal*k),p:Math.round(t.p*k),c:Math.round(t.c*k),f:Math.round(t.f*k)};}
+
+function openNewRecipe(){
+  editRecId=null;ingRows=[];
+  openModal(`
+    <div class="mt">Nueva receta<div class="mc" onclick="closeModal()">✕</div></div>
+    <div class="fg"><label class="fl">Nombre</label><input class="fc" id="rNm" type="text" placeholder="Ej: Arroz con pollo casero"></div>
+    <div class="fg"><label class="fl">Porciones que rinde</label><input class="fc" id="rSv" type="number" value="1" min="1"></div>
+    <div class="ct" style="padding:2px 0 8px;margin:0">Ingredientes</div>
+    <div style="font-size:10px;color:var(--text-dim);margin-bottom:8px">Escribe el nombre exacto de un alimento de tu biblioteca para autocompletar sus macros.</div>
+    <div id="ingBW"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px">
+      <button class="bs" onclick="addIng()" style="height:38px;font-size:11px">+ Manual</button>
+      <button onclick="openIngLibPicker()" style="height:38px;font-size:11px;background:rgba(0,255,157,.1);border:1px solid rgba(0,255,157,.3);border-radius:var(--radius-sm);font-family:var(--font-head);font-weight:700;color:var(--accent2);cursor:pointer">&#128218; Biblioteca</button>
+      <button onclick="openIngBarcode()" style="height:38px;font-size:11px;background:rgba(199,125,255,.1);border:1px solid rgba(199,125,255,.3);border-radius:var(--radius-sm);font-family:var(--font-head);font-weight:700;color:var(--accent4);cursor:pointer">&#9643; C&#243;digo</button>
+    </div>
+    <div class="ct" style="padding:2px 0 8px;margin:0">🤖 Crear con Groq AI</div>
+    <div style="display:flex;gap:7px;margin-bottom:12px">
+      <input class="fc" id="aiRP" placeholder="Ej: Sopa de pollo con verduras, 4 porciones" style="flex:1;font-size:12px">
+      <button class="bs" onclick="aiRecipe()" style="width:auto;padding:0 12px;font-size:11px;white-space:nowrap">Generar</button>
+    </div>
+    <button class="bp" onclick="saveRecipe()" style="height:42px;font-size:12px">💾 Guardar receta</button>
+  `);
+  renderIngB();
 }
 
 function libCtx(){
@@ -1336,7 +1564,7 @@ function updateIngGrams(i, newG){
 
 function recalcAiTotals(){
   if(!pendingFood||!pendingFood.ingredientes)return;
-  const mult=parseFloat(document.getElementById('aiMult')?.value)||1;
+  const mult=parseFloat((document.getElementById('aiMult')||{}).value)||1;
   let cal=0,p=0,c=0,f=0;
   pendingFood.ingredientes.forEach((ing,i)=>{
     const cb=document.getElementById('icb_'+i);
@@ -1401,7 +1629,7 @@ function confirmAddFood(separado){
     const totF  =selected.reduce((s,i)=>s+Math.round((i.grasas||0)*mult),0);
     const totFib=selected.reduce((s,i)=>s+Math.round((i.fibra||0)*mult),0);
     const totSug=selected.reduce((s,i)=>s+Math.round((i.azucar||0)*mult),0);
-    const portLabel=pendingBase?.porcion?(mult!==1?`${mult}x ${pendingBase.porcion}`:pendingBase.porcion):'';
+    const portLabel=(pendingBase && pendingBase.porcion)?(mult!==1?`${mult}x ${pendingBase.porcion}`:pendingBase.porcion):'';
     const dishName=pendingFood.plato||pendingFood.alimento||'Plato';
     addEntry({
       name:selected.length<ings.length?`${dishName} (parcial)`:dishName,
@@ -1438,7 +1666,7 @@ function clearImg(){
 
 // ── LIBRARY ──
 function renderLib(){
-  const q=(document.getElementById('libQ')?.value||'').toLowerCase();
+  const q=((document.getElementById('libQ')||{}).value||'').toLowerCase();
   const lib=S.getLib().filter(i=>i.name.toLowerCase().includes(q));
   const wrap=document.getElementById('libList');if(!wrap)return;
   if(!lib.length){wrap.innerHTML='<div class="empty" style="padding:14px"><span class="emoji">🔍</span>Sin resultados.</div>';return;}
@@ -1446,9 +1674,9 @@ function renderLib(){
     <div class="lib-item">
       <div style="font-size:20px;flex-shrink:0">${item.custom?'⭐':'🥗'}</div>
       <div class="lib-info"><div class="lib-name">${esc(item.name)}</div>
-        <div class="lib-mac">${item.calorias}kcal P:${item.proteinas}g C:${item.carbohidratos}g G:${item.grasas}g <span style="font-size:9px;color:var(--text-dim)">/100g</span></div></div>
+        <div class="lib-mac">${item.calPorcion||item.calorias}kcal P:${item.protPorcion||item.proteinas}g C:${item.carbPorcion||item.carbohidratos}g G:${item.grasPorcion||item.grasas}g · <span style="color:var(--accent);font-size:9px">${esc(item.porcionNombre||'100g')}</span></div></div>
       ${item.custom?'<span class="badge bc">M&#237;o</span>':''}
-      ${item.useCount>2?`<span class="badge bf">x${item.useCount}</span>`:''}
+      '+(item.useCount>2?'<span class="badge bf">x'+item.useCount+'</span>':'')+'
       <div class="lib-act">
         <div class="lbtn add" onclick="openServe('${item.id}')">+</div>
         <div class="lbtn edt" onclick="openEditFood('${item.id}')">✏</div>
@@ -1459,20 +1687,50 @@ function renderLib(){
 
 function openServe(id){
   const item=S.getLib().find(i=>i.id===id);if(!item)return;
-  openModal(`
-    <div class="mt">${esc(item.name)}<div class="mc" onclick="closeModal()">✕</div></div>
-    <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px">Valores por 100g. Ingresa cuantos gramos vas a comer.</div>
-    <div class="fg"><label class="fl">Gramos</label>
-      <input class="fc" id="sG" type="number" value="100" min="1" oninput="updServe('${id}')">
-    </div>
-    <div id="sPrev" style="font-size:12px;color:var(--accent2);margin-bottom:14px"></div>
-    <button class="bp" onclick="confirmServe('${id}')" style="height:40px;font-size:12px">✓ Agregar al registro</button>
-  `);
+  const hasPortion=!!(item.porcionGramos&&item.porcionNombre);
+  const defaultG=hasPortion?item.porcionGramos:100;
+  let html='<div class="mt">'+esc(item.name)+'<div class="mc" onclick="closeModal()">&#10005;</div></div>';
+  html+='<div style="font-size:11px;color:var(--text-dim);margin-bottom:12px">';
+  html+=hasPortion?('Porci&#243;n base: <b style="color:var(--accent)">'+esc(item.porcionNombre)+' = '+item.porcionGramos+'g</b>'):'Valores por 100g';
+  html+='</div>';
+  html+='<div class="fr2" style="margin-bottom:10px">';
+  html+='<div class="fg" style="margin:0"><label class="fl">Gramos</label>';
+  html+='<input class="fc" id="sG" type="number" value="'+defaultG+'" min="1" oninput="updServe(\''+id+'\')"></div>';
+  if(hasPortion){
+    html+='<div class="fg" style="margin:0"><label class="fl">Porciones</label>';
+    html+='<input class="fc" id="sPor" type="number" value="1" min="0.25" step="0.25" oninput="syncServePortion(\''+id+'\',this.value)"></div>';
+  }else{ html+='<div></div>'; }
+  html+='</div>';
+  if(hasPortion){
+    html+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">';
+    [0.5,1,1.5,2,3].forEach(function(n){
+      html+='<button onclick="quickPortion(\''+id+'\','+n+')" style="background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-family:var(--font-head);font-size:11px;font-weight:700;color:var(--text-mid);cursor:pointer">'+(n===Math.floor(n)?n:n.toFixed(1))+'x</button>';
+    });
+    html+='</div>';
+  }
+  html+='<div id="sPrev" style="font-size:13px;color:var(--accent2);margin-bottom:14px;font-family:var(--font-head);font-weight:600;min-height:18px"></div>';
+  html+='<button class="bp" onclick="confirmServe(\''+id+'\')" style="height:42px;font-size:13px">&#10003; Agregar al registro</button>';
+  openModal(html);
+  updServe(id);
+}
+
+function syncServePortion(id,portions){
+  const item=S.getLib().find(i=>i.id===id);if(!item||!item.porcionGramos)return;
+  const g=Math.round((parseFloat(portions)||1)*item.porcionGramos);
+  const gEl=document.getElementById('sG');if(gEl)gEl.value=g;
+  updServe(id);
+}
+
+function quickPortion(id,n){
+  const item=S.getLib().find(i=>i.id===id);if(!item||!item.porcionGramos)return;
+  const g=Math.round(n*item.porcionGramos);
+  const gEl=document.getElementById('sG');if(gEl)gEl.value=g;
+  const pEl=document.getElementById('sPor');if(pEl)pEl.value=n;
   updServe(id);
 }
 function updServe(id){
   const item=S.getLib().find(i=>i.id===id);if(!item)return;
-  const g=parseFloat(document.getElementById('sG')?.value)||0;
+  const g=parseFloat((document.getElementById('sG')||{}).value)||0;
   const f=g/100;
   const el=document.getElementById('sPrev');
   if(el)el.textContent=`≈ ${Math.round(item.calorias*f)} kcal · P:${Math.round(item.proteinas*f)}g · C:${Math.round(item.carbohidratos*f)}g · G:${Math.round(item.grasas*f)}g`;
@@ -1486,28 +1744,110 @@ function confirmServe(id){
 }
 
 function openAddFoodModal(prefill){
-  editFoodId=prefill?.id||null;
+  editFoodId=(prefill && prefill.id)||null;
+  const v=(k,d='')=>prefill&&prefill[k]!==undefined?prefill[k]:d;
   openModal(`
-    <div class="mt">${prefill?'Editar':'Nuevo'} alimento<div class="mc" onclick="closeModal()">✕</div></div>
-    <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px">Valores por 100g</div>
-    <div class="fg"><label class="fl">Nombre</label><input class="fc" id="nN" type="text" value="${esc(prefill?.name||'')}" placeholder="Ej: Pollo al horno casero"></div>
-    <div class="fr2"><div class="fg"><label class="fl">Calorias/100g</label><input class="fc" id="nC" type="number" value="${prefill?.calorias||''}" placeholder="kcal"></div><div class="fg"><label class="fl">Proteinas (g)</label><input class="fc" id="nP" type="number" value="${prefill?.proteinas||''}" placeholder="0"></div></div>
-    <div class="fr2"><div class="fg"><label class="fl">Carbos (g)</label><input class="fc" id="nCb" type="number" value="${prefill?.carbohidratos||''}" placeholder="0"></div><div class="fg"><label class="fl">Grasas (g)</label><input class="fc" id="nF" type="number" value="${prefill?.grasas||''}" placeholder="0"></div></div>
-    <button class="bp" onclick="saveLibFood()" style="height:40px;font-size:12px">💾 Guardar en biblioteca</button>
+    <div class="mt">${prefill?'Editar':'Nuevo'} alimento<div class="mc" onclick="closeModal()">&#10005;</div></div>
+
+    <!-- Scan nutrition label button -->
+    <button onclick="scanNutritionLabel()" style="width:100%;background:rgba(199,125,255,.12);border:1px solid rgba(199,125,255,.35);border-radius:var(--radius-sm);padding:10px;font-family:var(--font-head);font-size:12px;font-weight:700;color:var(--accent4);cursor:pointer;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:7px">
+      <span style="font-size:18px">&#128247;</span> Escanear tabla nutricional
+    </button>
+
+    <div class="fg"><label class="fl">Nombre del alimento</label>
+      <input class="fc" id="nN" type="text" value="${v('name')}" placeholder="Ej: Galletas Soda Pozuelo">
+    </div>
+
+    <!-- Serving size -->
+    <div style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;margin-bottom:12px">
+      <div style="font-size:9px;color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;font-family:var(--font-head);font-weight:700">Tama&#241;o de porci&#243;n</div>
+      <div class="fr2">
+        <div class="fg" style="margin:0"><label class="fl">Nombre de porci&#243;n</label>
+          <input class="fc" id="nPN" type="text" value="${v('porcionNombre','100g')}" placeholder="Ej: 1 galleta, 1 taza, 1 cucharada">
+        </div>
+        <div class="fg" style="margin:0"><label class="fl">Gramos por porci&#243;n</label>
+          <input class="fc" id="nPG" type="number" value="${v('porcionGramos',100)}" min="1" placeholder="30">
+        </div>
+      </div>
+    </div>
+
+    <!-- Main macros -->
+    <div style="font-size:9px;color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;font-family:var(--font-head);font-weight:700">Macros por porci&#243;n</div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">&#128293; Calorias</label><input class="fc" id="nC" type="number" value="${v('calorias')}" placeholder="kcal"></div>
+      <div class="fg"><label class="fl">&#128165; Proteinas (g)</label><input class="fc" id="nP" type="number" value="${v('proteinas',0)}" placeholder="0"></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">&#127881; Carbohidratos (g)</label><input class="fc" id="nCb" type="number" value="${v('carbohidratos',0)}" placeholder="0"></div>
+      <div class="fg"><label class="fl">&#129472; Grasas totales (g)</label><input class="fc" id="nF" type="number" value="${v('grasas',0)}" placeholder="0"></div>
+    </div>
+
+    <!-- Optional macros -->
+    <details style="margin-bottom:12px">
+      <summary style="font-size:10px;color:var(--text-dim);cursor:pointer;padding:6px 0;font-family:var(--font-head);font-weight:700;letter-spacing:1px;text-transform:uppercase;list-style:none">
+        &#9660; Macros adicionales (opcional)
+      </summary>
+      <div style="margin-top:8px">
+        <div class="fr2">
+          <div class="fg"><label class="fl">&#127807; Fibra (g)</label><input class="fc" id="nFib" type="number" value="${v('fibra',0)}" placeholder="0"></div>
+          <div class="fg"><label class="fl">&#127853; Az&#250;car (g)</label><input class="fc" id="nSug" type="number" value="${v('azucar',0)}" placeholder="0"></div>
+        </div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">Grasa saturada (g)</label><input class="fc" id="nGS" type="number" value="${v('grasaSat',0)}" placeholder="0"></div>
+          <div class="fg"><label class="fl">Sodio (mg)</label><input class="fc" id="nSod" type="number" value="${v('sodio',0)}" placeholder="0"></div>
+        </div>
+        <div class="fr2">
+          <div class="fg"><label class="fl">Colesterol (mg)</label><input class="fc" id="nCol" type="number" value="${v('colesterol',0)}" placeholder="0"></div>
+          <div class="fg"><label class="fl">Potasio (mg)</label><input class="fc" id="nPot" type="number" value="${v('potasio',0)}" placeholder="0"></div>
+        </div>
+      </div>
+    </details>
+
+    <button class="bp" onclick="saveLibFood()" style="height:42px;font-size:13px">&#128190; Guardar en biblioteca</button>
   `);
 }
 function openEditFood(id){const item=S.getLib().find(i=>i.id===id);if(item)openAddFoodModal(item);}
 function saveLibFood(){
-  const name=document.getElementById('nN').value.trim();
-  const cal=parseFloat(document.getElementById('nC').value)||0;
-  const pro=parseFloat(document.getElementById('nP').value)||0;
-  const carb=parseFloat(document.getElementById('nCb').value)||0;
-  const fat=parseFloat(document.getElementById('nF').value)||0;
+  const name=((document.getElementById('nN')||{}).value||'').trim();
+  const cal =parseFloat((document.getElementById('nC')||{}).value)||0;
   if(!name||!cal){showToast('Nombre y calorias son obligatorios','warn');return;}
+  const pg  =parseFloat((document.getElementById('nPG')||{}).value)||100;
+  const pn  =((document.getElementById('nPN')||{}).value||'').trim()||`${pg}g`;
+  // Store per-100g (for recipe scaling) AND per-serving
+  const f100=pg>0?100/pg:1; // factor to convert serving->100g
+  const entry={
+    id:editFoodId||uid('li'),
+    name,
+    // Per 100g for recipe compatibility
+    calorias:      Math.round(cal*f100),
+    proteinas:     Math.round((parseFloat((document.getElementById('nP')||{}).value)||0)*f100),
+    carbohidratos: Math.round((parseFloat((document.getElementById('nCb')||{}).value)||0)*f100),
+    grasas:        Math.round((parseFloat((document.getElementById('nF')||{}).value)||0)*f100),
+    fibra:         Math.round((parseFloat((document.getElementById('nFib')||{}).value)||0)*f100),
+    azucar:        Math.round((parseFloat((document.getElementById('nSug')||{}).value)||0)*f100),
+    grasaSat:      Math.round((parseFloat((document.getElementById('nGS')||{}).value)||0)*f100),
+    sodio:         Math.round((parseFloat((document.getElementById('nSod')||{}).value)||0)*f100),
+    colesterol:    Math.round((parseFloat((document.getElementById('nCol')||{}).value)||0)*f100),
+    potasio:       Math.round((parseFloat((document.getElementById('nPot')||{}).value)||0)*f100),
+    // Serving info (for display and quick-add)
+    porcionNombre: pn,
+    porcionGramos: pg,
+    // Per-serving values (original, for display)
+    calPorcion:    Math.round(cal),
+    protPorcion:   Math.round(parseFloat((document.getElementById('nP')||{}).value)||0),
+    carbPorcion:   Math.round(parseFloat((document.getElementById('nCb')||{}).value)||0),
+    grasPorcion:   Math.round(parseFloat((document.getElementById('nF')||{}).value)||0),
+    custom:true,useCount:editFoodId?((S.getLib().find(i=>i.id===editFoodId)||{}).useCount||0):0,lastUsed:''
+  };
   const lib=S.getLib();
-  if(editFoodId){const idx=lib.findIndex(i=>i.id===editFoodId);if(idx>=0)lib[idx]={...lib[idx],name,calorias:cal,proteinas:pro,carbohidratos:carb,grasas:fat,custom:true};}
-  else lib.push({id:uid('li'),name,calorias:cal,proteinas:pro,carbohidratos:carb,grasas:fat,custom:true,useCount:0,lastUsed:''});
-  S.setLib(lib);closeModal();showToast(`"${name}" guardado`,'success');renderLib();buildDS();
+  if(editFoodId){
+    const idx=lib.findIndex(i=>i.id===editFoodId);
+    if(idx>=0)lib[idx]={...lib[idx],...entry};
+  }else{
+    lib.push(entry);
+  }
+  S.setLib(lib);
+  closeModal();showToast(`"${name}" guardado`,'success');renderLib();buildDS();
 }
 function delLib(id){S.setLib(S.getLib().filter(i=>i.id!==id));showToast('Eliminado','success');renderLib();}
 
@@ -1538,39 +1878,9 @@ function renderRecFreq(){
   if(re)re.innerHTML=recent.length?`<div class="pill-row">${recent.map(pill).join('')}</div>`:'<div style="font-size:11px;color:var(--text-dim);padding:4px 0">Registra alimentos para verlos aqui.</div>';
 }
 
-// ── RECIPES ──
-function calcTot(r){
-  let cal=0,p=0,c=0,f=0;
-  for(const i of r.ingredients){const g=Number(i.grams)||0;cal+=(i.cal100/100)*g;p+=(i.p100/100)*g;c+=(i.c100/100)*g;f+=(i.f100/100)*g;}
-  return{cal:Math.round(cal),p:Math.round(p),c:Math.round(c),f:Math.round(f)};
-}
-function calcPort(r,n){const t=calcTot(r),s=Number(r.servings)||1,k=n/s;return{cal:Math.round(t.cal*k),p:Math.round(t.p*k),c:Math.round(t.c*k),f:Math.round(t.f*k)};}
 
-function openNewRecipe(){
-  editRecId=null;ingRows=[];
-  openModal(`
-    <div class="mt">Nueva receta<div class="mc" onclick="closeModal()">✕</div></div>
-    <div class="fg"><label class="fl">Nombre</label><input class="fc" id="rNm" type="text" placeholder="Ej: Arroz con pollo casero"></div>
-    <div class="fg"><label class="fl">Porciones que rinde</label><input class="fc" id="rSv" type="number" value="1" min="1"></div>
-    <div class="ct" style="padding:2px 0 8px;margin:0">Ingredientes</div>
-    <div style="font-size:10px;color:var(--text-dim);margin-bottom:8px">Escribe el nombre exacto de un alimento de tu biblioteca para autocompletar sus macros.</div>
-    <div id="ingBW"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px">
-      <button class="bs" onclick="addIng()" style="height:38px;font-size:11px">+ Manual</button>
-      <button onclick="openIngLibPicker()" style="height:38px;font-size:11px;background:rgba(0,255,157,.1);border:1px solid rgba(0,255,157,.3);border-radius:var(--radius-sm);font-family:var(--font-head);font-weight:700;color:var(--accent2);cursor:pointer">&#128218; Biblioteca</button>
-      <button onclick="openIngBarcode()" style="height:38px;font-size:11px;background:rgba(199,125,255,.1);border:1px solid rgba(199,125,255,.3);border-radius:var(--radius-sm);font-family:var(--font-head);font-weight:700;color:var(--accent4);cursor:pointer">&#9643; C&#243;digo</button>
-    </div>
-    <div class="ct" style="padding:2px 0 8px;margin:0">🤖 Crear con Groq AI</div>
-    <div style="display:flex;gap:7px;margin-bottom:12px">
-      <input class="fc" id="aiRP" placeholder="Ej: Sopa de pollo con verduras, 4 porciones" style="flex:1;font-size:12px">
-      <button class="bs" onclick="aiRecipe()" style="width:auto;padding:0 12px;font-size:11px;white-space:nowrap">Generar</button>
-    </div>
-    <button class="bp" onclick="saveRecipe()" style="height:42px;font-size:12px">💾 Guardar receta</button>
-  `);
-  renderIngB();
-}
 
-function addIng(pf){ingRows.push({id:uid('i'),name:pf?.name||'',grams:pf?.grams||100,cal100:pf?.cal100||0,p100:pf?.p100||0,c100:pf?.c100||0,f100:pf?.f100||0});renderIngB();}
+function addIng(pf){ingRows.push({id:uid('i'),name:(pf && pf.name)||'',grams:(pf && pf.grams)||100,cal100:(pf && pf.cal100)||0,p100:(pf && pf.p100)||0,c100:(pf && pf.c100)||0,f100:(pf && pf.f100)||0});renderIngB();}
 function remIng(id){ingRows=ingRows.filter(r=>r.id!==id);renderIngB();}
 function renderIngB(){
   const w=document.getElementById('ingBW');if(!w)return;
@@ -1585,9 +1895,10 @@ function renderIngB(){
       <div style="display:grid;grid-template-columns:65px 1fr 1fr 1fr 1fr;gap:5px">
         <div><div style="font-size:8px;color:var(--text-dim);letter-spacing:1px;margin-bottom:3px">GRAMOS</div>
           <input class="fc" style="font-size:11px;padding:5px 6px;text-align:center" type="number" value="${row.grams}" min="0" oninput="updIng('${row.id}','grams',this.value)"></div>
-        ${['cal100','p100','c100','f100'].map((f,i)=>`
-        <div><div style="font-size:8px;color:var(--text-dim);letter-spacing:1px;margin-bottom:3px">${['CAL','PROT','CARB','GRAS'][i]}</div>
-          <input class="fc" style="font-size:11px;padding:5px 6px;text-align:center" type="number" value="${row[f]}" min="0" oninput="updIng('${row.id}','${f}',this.value)"></div>`).join('')}
+        '+['cal100','p100','c100','f100'].map(function(f,i){
+        return '<div><div style="font-size:8px;color:var(--text-dim);letter-spacing:1px;margin-bottom:3px">'+['CAL','PROT','CARB','GRAS'][i]+'</div>'
+          +'<input class="fc" style="font-size:11px;padding:5px 6px;text-align:center" type="number" value="'+row[f]+'" min="0" oninput="updIng(\''+row.id+'\',\''+f+'\',this.value)"></div>';
+      }).join('')+'
       </div>
     </div>`).join('');
 }
@@ -1600,7 +1911,7 @@ function autoFill(rowId,text){
 }
 
 async function aiRecipe(){
-  const prompt=document.getElementById('aiRP')?.value?.trim();
+  const aiRPEl=document.getElementById('aiRP');const prompt=aiRPEl?aiRPEl.value.trim():'';
   if(!prompt){showToast('Describe la receta primero','warn');return;}
   const key=S.getKey();if(!key){showToast('Configura tu API Key de Groq en Ajustes','error');return;}
   showToast('Creando receta con Groq AI...','');
@@ -1621,8 +1932,8 @@ Receta: ${prompt}`;
 }
 
 function saveRecipe(){
-  const name=document.getElementById('rNm')?.value?.trim();
-  const servings=parseFloat(document.getElementById('rSv')?.value)||1;
+  const rNmEl=document.getElementById('rNm');const name=rNmEl?rNmEl.value.trim():'';
+  const servings=parseFloat((document.getElementById('rSv')||{}).value)||1;
   if(!name){showToast('Ponle nombre a la receta','warn');return;}
   if(!ingRows.length){showToast('Agrega al menos un ingrediente','warn');return;}
   const recs=S.getRec();
@@ -1637,7 +1948,7 @@ function delRec(id){S.setRec(S.getRec().filter(r=>r.id!==id));showToast('Receta 
 
 function logPort(id){
   const rec=S.getRec().find(r=>r.id===id);if(!rec)return;
-  const n=parseFloat(document.getElementById(`rp_${id}`)?.value)||1;
+  const n=parseFloat((document.getElementById('rp_'+id)||{}).value)||1;
   const m=calcPort(rec,n);
   addEntry({name:rec.name,calorias:m.cal,proteinas:m.p,carbohidratos:m.c,grasas:m.f,emoji:rec.emoji,
     porcion:`${n===Math.floor(n)?n:n.toFixed(2)} porcion${n!==1?'es':''}`});
@@ -1646,7 +1957,7 @@ function logPort(id){
 
 function updPP(id){
   const rec=S.getRec().find(r=>r.id===id);if(!rec)return;
-  const n=parseFloat(document.getElementById(`rp_${id}`)?.value)||1;
+  const n=parseFloat((document.getElementById('rp_'+id)||{}).value)||1;
   const m=calcPort(rec,n);
   const el=document.getElementById(`pp_${id}`);
   if(el)el.textContent=`≈ ${m.cal} kcal · P:${m.p}g · C:${m.c}g · G:${m.f}g`;
@@ -1678,12 +1989,12 @@ function renderRecList(){
         <div class="rchev">›</div>
       </div>
       <div class="rbody">
-        ${rec.ingredients.map((ing,i)=>{
+        '+rec.ingredients.map(function(ing,i){
           const kcal=Math.round((ing.cal100/100)*ing.grams);
-          return `<div class="ir"><span class="ing-n">${esc(ing.name)}</span>
-            <input class="ing-g" type="number" value="${ing.grams}" min="0" onchange="updRIG('${rec.id}',${i},this.value)">
-            <span class="ing-k">${kcal}kcal</span></div>`;
-        }).join('')}
+          return '<div class="ir"><span class="ing-n">'+esc(ing.name)+'</span>'
+            +'<input class="ing-g" type="number" value="'+ing.grams+'" min="0" onchange="updRIG(''+rec.id+'','+i+',this.value)">'
+            +'<span class="ing-k">'+kcal+'kcal</span></div>';
+        }).join('')+'
         <div class="pr"><span class="pl">Porciones a comer</span>
           <input class="pi" id="rp_${rec.id}" type="number" value="1" min="0.25" max="10" step="0.25" oninput="updPP('${rec.id}')">
           <span style="font-size:10px;color:var(--text-dim)">/ ${rec.servings}</span>
@@ -1699,85 +2010,206 @@ function renderRecList(){
 }
 
 // ── BARCODE ──
-async function startBarcode(){
-  const key=S.getKey();if(!key){showToast('Necesitas API Key de Groq en Ajustes','error');return;}
-  const input=document.createElement('input');
-  input.type='file';input.accept='image/*';input.capture='environment';
-  input.onchange=async(e)=>{
-    const file=e.target.files[0];if(!file)return;
-    showToast('Leyendo codigo de barras...','');
-    const reader=new FileReader();
-    reader.onload=async ev=>{
-      try{
-        const raw=await callGroq([{role:'user',content:[
-          {type:'image_url',image_url:{url:`data:${file.type};base64,${ev.target.result.split(',')[1]}`}},
-          {type:'text',text:'Lee el codigo de barras EAN/UPC de esta imagen y devuelve SOLO el numero sin texto adicional. Si no hay codigo visible devuelve: none'}
-        ]}],key,GROQ_VISION_MODEL);
-        const code=raw.trim().replace(/\D/g,'');
-        if(!code||code.length<7){showToast('No se detecto codigo de barras','error');return;}
-        document.getElementById('bcInput').value=code;lookupBC();
-      }catch(err){showToast('Error: '+err.message.slice(0,60),'error');}
-    };
-    reader.readAsDataURL(file);
-  };
-  input.click();
-}
+// startBarcode removed - replaced by startLiveScanner
 
 async function lookupBC(){
-  const code=document.getElementById('bcInput').value.trim();
+  const code=((document.getElementById('bcInput')||{}).value||'').trim();
   if(!code){showToast('Ingresa un codigo','warn');return;}
-  const w=document.getElementById('bcResult');
-  w.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-dim)"><div class="ldots" style="justify-content:center"><span></span><span></span><span></span></div><div style="margin-top:8px;font-size:12px">Buscando en Open Food Facts...</div></div>';
-  try{
-    const res=await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`);
-    const data=await res.json();
-    if(data.status!==1||!data.product){
-      w.innerHTML=`<div class="empty" style="padding:16px">
-        <span class="emoji">🔍</span>
-        <b style="color:var(--text)">Producto no encontrado en Open Food Facts</b><br>
-        <span style="font-size:11px">Codigo: ${code}</span>
+  const wrap=document.getElementById('bcResult');if(!wrap)return;
+
+  // ── Check personal barcode library FIRST ──
+  const custom=S.getBarcodes()[code];
+  if(custom){
+    wrap.innerHTML='';
+    renderBCProduct({...custom,_source:'Tu biblioteca personal ⭐'});
+    return;
+  }
+
+  wrap.innerHTML='<div style="text-align:center;padding:18px;color:var(--text-dim)"><div class="ldots" style="justify-content:center"><span></span><span></span><span></span></div><div style="margin-top:8px;font-size:12px">Buscando en bases de datos...</div></div>';
+
+  // Try multiple databases in order
+  const databases=[
+    { name:'Open Food Facts', fn:()=>fetchOFF(code) },
+    { name:'USDA FoodData',   fn:()=>fetchUSDA(code) },
+  ];
+
+  let product=null;
+  let triedDbs=[];
+  for(const db of databases){
+    triedDbs.push(db.name);
+    try{
+      product=await db.fn();
+      if(product){product._source=db.name;break;}
+    }catch(e){console.warn(db.name,'failed:',e.message);}
+  }
+
+  if(!product){
+    wrap.innerHTML=`<div class="empty" style="padding:14px">
+      <span class="emoji">🔍</span>
+      <b style="color:var(--text)">No encontrado en ninguna base de datos</b><br>
+      <span style="font-size:10px;color:var(--text-dim)">Buscado en: ${triedDbs.join(', ')}</span>
+    </div>
+    <div style="margin-top:8px">
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">Buscar por nombre:</div>
+      <div style="display:flex;gap:7px;margin-bottom:8px">
+        <input class="fc" id="bcNameQ" type="text" placeholder="Ej: Coca Cola, Galletas Pozuelo..." style="flex:1;font-size:12px">
+        <button class="bp" style="width:auto;padding:0 12px;font-size:12px" onclick="searchBCByName()">Buscar</button>
       </div>
-      <div style="margin-top:8px">
-        <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">Busca por nombre del producto:</div>
-        <div style="display:flex;gap:7px;margin-bottom:8px">
-          <input class="fc" id="bcNameQ" type="text" placeholder="Ej: Coca Cola, Gallo Pinto Dos Pinos..." style="flex:1;font-size:12px">
-          <button class="bp" style="width:auto;padding:0 12px;font-size:12px" onclick="searchBCByName()">Buscar</button>
-        </div>
-        <div id="bcNameResults"></div>
-        <div class="div"></div>
-        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">O agregar manualmente:</div>
-        <button class="bs" onclick="openAddFromBarcode('${code}')" style="height:38px;font-size:12px">+ Agregar manualmente</button>
-      </div>`;
-      return;
-    }
-    const p=data.product,n=p.nutriments||{};
-    const name=p.product_name||p.generic_name||'Producto escaneado';
-    const cal=Math.round(n['energy-kcal_100g']||n['energy-kcal']||0);
-    const pro=Math.round(n['proteins_100g']||0);
-    const carb=Math.round(n['carbohydrates_100g']||0);
-    const fat=Math.round(n['fat_100g']||0);
-    const brand=p.brands||'';const serving=p.serving_size||'100g';
-    w.innerHTML=`
-      <div class="lib-item" style="margin-bottom:10px">
-        <div style="font-size:24px;flex-shrink:0">${p.image_small_url?`<img src="${p.image_small_url}" style="width:40px;height:40px;object-fit:cover;border-radius:8px">`:'📦'}</div>
-        <div class="lib-info"><div class="lib-name">${esc(name)}</div>
-          <div class="lib-mac">${cal}kcal P:${pro}g C:${carb}g G:${fat}g${brand?' · '+esc(brand):''}</div>
-          <div style="font-size:9px;color:var(--text-dim);margin-top:2px">Porcion ref: ${esc(serving)} · Open Food Facts</div>
-        </div>
-      </div>
-      <div class="fg"><label class="fl">Gramos a comer</label>
-        <input class="fc" id="bcG" type="number" value="100" oninput="updBC(${cal},${pro},${carb},${fat})">
-      </div>
-      <div id="bcPrev" style="font-size:12px;color:var(--accent2);margin-bottom:10px"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
-        <button class="bp" onclick="addBC(${cal},${pro},${carb},${fat},'${esc(name)}')" style="height:40px;font-size:12px">+ Agregar al dia</button>
-        <button class="bs" onclick="saveBC(${cal},${pro},${carb},${fat},'${esc(name)}')" style="height:40px;font-size:12px">💾 Guardar</button>
-      </div>`;
-    updBC(cal,pro,carb,fat);
-  }catch(err){w.innerHTML='<div class="empty"><span class="emoji">⚠️</span>Error de red. Verifica tu conexion.</div>';}
+      <div id="bcNameResults"></div>
+      <div class="div"></div>
+      <button class="bs" onclick="openAddFromBarcode('${code}')" style="height:38px;font-size:12px">+ Agregar manualmente</button>
+    </div>`;
+    return;
+  }
+
+  renderBCProduct(product);
 }
+
+async function fetchOFF(code){
+  const res=await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`);
+  const data=await res.json();
+  if(data.status!==1||!data.product)return null;
+  const p=data.product,n=p.nutriments||{};
+  const name=p.product_name||p.generic_name||null;
+  if(!name)return null;
+  // OFF provides per 100g AND per serving
+  const servSize=p.serving_size||null;
+  const servG=p.serving_quantity?parseFloat(p.serving_quantity):null;
+  // Prefer per-serving if available, else per 100g
+  const useSrv=servG&&n['energy-kcal_serving'];
+  return{
+    name, brand:p.brands||'',
+    porcionNombre:servSize||'100g',
+    porcionGramos:servG||100,
+    cal:   Math.round(useSrv?n['energy-kcal_serving']:n['energy-kcal_100g']||0),
+    pro:   Math.round(useSrv?n['proteins_serving']||0:n['proteins_100g']||0),
+    carb:  Math.round(useSrv?n['carbohydrates_serving']||0:n['carbohydrates_100g']||0),
+    fat:   Math.round(useSrv?n['fat_serving']||0:n['fat_100g']||0),
+    fibra: Math.round(useSrv?n['fiber_serving']||0:n['fiber_100g']||0),
+    azucar:Math.round(useSrv?n['sugars_serving']||0:n['sugars_100g']||0),
+    sodio: Math.round(useSrv?n['sodium_serving']||0:n['sodium_100g']||0)*1000,// OFF stores sodium in g
+    cal100:Math.round(n['energy-kcal_100g']||0),
+    pro100:Math.round(n['proteins_100g']||0),
+    carb100:Math.round(n['carbohydrates_100g']||0),
+    fat100:Math.round(n['fat_100g']||0),
+    imgUrl:p.image_small_url||null,
+    perServing:!!useSrv,
+  };
+}
+
+async function fetchUSDA(code){
+  // USDA FoodData Central - free DEMO key allows limited requests
+  const res=await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?query=${code}&api_key=DEMO_KEY&pageSize=1`);
+  const data=await res.json();
+  const food=(data && data.foods && data.foods[0]);if(!food)return null;
+  const nutrients=food.foodNutrients||[];
+  const get=(name)=>{const n=nutrients.find(function(n){return n.nutrientName&&n.nutrientName.toLowerCase().includes(name);});return n?Math.round(n.value||0):0;};
+  return{
+    name:food.description,brand:food.brandOwner||'',
+    porcionNombre:food.servingSize?`${food.servingSize}${food.servingSizeUnit||'g'}`:'100g',
+    porcionGramos:food.servingSize||100,
+    cal:get('energy'),pro:get('protein'),carb:get('carbohydrate'),fat:get('total fat'),
+    fibra:get('fiber'),azucar:get('sugars'),sodio:get('sodium'),
+    cal100:get('energy'),pro100:get('protein'),carb100:get('carbohydrate'),fat100:get('total fat'),
+    imgUrl:null,perServing:false,
+  };
+}
+
+function renderBCProduct(p){
+  window._pendingBCProduct=p;
+  var wrap=document.getElementById('bcResult');if(!wrap)return;
+  var c100=p.cal100||p.cal||0;
+  var p100=p.pro100||p.pro||0;
+  var cb100=p.carb100||p.carb||0;
+  var f100=p.fat100||p.fat||0;
+  var defG=p.porcionGramos||100;
+  var imgHtml=p.imgUrl?('<img src="'+p.imgUrl+'" style="width:44px;height:44px;object-fit:cover;border-radius:8px">'):'\uD83D\uDCE6';
+  var brandHtml=p.brand?(' <span style="font-weight:400;font-size:10px;color:var(--text-dim)">&middot; '+esc(p.brand)+'</span>'):'';
+  var fibraHtml=p.fibra?(' Fib:'+p.fibra+'g'):'';
+  var porcNom=esc(p.porcionNombre||'100g');
+  var src=esc(p._source||'');
+  wrap.innerHTML=
+    '<div class="lib-item" style="margin-bottom:10px">'
+    +'<div style="font-size:24px;flex-shrink:0">'+imgHtml+'</div>'
+    +'<div class="lib-info">'
+    +'<div class="lib-name">'+esc(p.name)+brandHtml+'</div>'
+    +'<div class="lib-mac">'+p.cal+'kcal P:'+p.pro+'g C:'+p.carb+'g G:'+p.fat+'g'+fibraHtml+'</div>'
+    +'<div style="font-size:9px;color:var(--accent);margin-top:2px">Por '+porcNom+' ('+defG+'g) &middot; '+src+'</div>'
+    +'</div></div>'
+    +'<div class="fr2" style="margin-bottom:8px">'
+    +'<div class="fg" style="margin:0"><label class="fl">Gramos a comer</label>'
+    +'<input class="fc" id="bcG" type="number" value="'+defG+'" oninput="updBCServing('+c100+','+p100+','+cb100+','+f100+','+defG+')"></div>'
+    +'<div class="fg" style="margin:0"><label class="fl">Porciones</label>'
+    +'<input class="fc" id="bcPor" type="number" value="1" min="0.25" step="0.25" oninput="bcSyncPortion('+defG+','+c100+','+p100+','+cb100+','+f100+')"></div>'
+    +'</div>'
+    +'<div id="bcPrev" style="font-size:12px;color:var(--accent2);margin-bottom:10px;font-family:var(--font-head);font-weight:600"></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">'
+    +'<button class="bp" onclick="addBCPending()" style="height:40px;font-size:12px">+ Agregar al d&iacute;a</button>'
+    +'<button class="bs" onclick="saveBCFullPending()" style="height:40px;font-size:12px">&#128190; Guardar</button>'
+    +'</div>';
+  updBCServing(c100,p100,cb100,f100,defG);
+}
+
+function bcSyncPortion(defG,c100,p100,cb100,f100){
+  var gEl=document.getElementById('bcG');
+  var pEl=document.getElementById('bcPor');
+  if(gEl&&pEl)gEl.value=Math.round(parseFloat(pEl.value||1)*defG);
+  updBCServing(c100,p100,cb100,f100,defG);
+}
+
+function addBCPending(){
+  var p=window._pendingBCProduct;if(!p)return;
+  var g=parseFloat((document.getElementById('bcG')||{}).value)||p.porcionGramos||100;
+  addBC(p.cal100||p.cal,p.pro100||p.pro,p.carb100||p.carb,p.fat100||p.fat,p.name);
+}
+
+function updBCServing(cal100,pro100,carb100,fat100,defG){
+  const g=parseFloat((document.getElementById('bcG')||{}).value)||defG||100;
+  const f=g/100;
+  const el=document.getElementById('bcPrev');
+  if(el)el.textContent=`≈ ${Math.round(cal100*f)}kcal P:${Math.round(pro100*f)}g C:${Math.round(carb100*f)}g G:${Math.round(fat100*f)}g`;
+}
+
+
+function saveBCFullPending(){
+  if(window._pendingBCProduct) saveBCFull(window._pendingBCProduct);
+}
+function saveBCFull(p){
+  const lib=S.getLib();
+  const f100=p.porcionGramos>0?100/p.porcionGramos:1;
+  const entry={
+    id:uid('li'),name:p.name,
+    calorias:p.cal100||Math.round(p.cal*f100),
+    proteinas:p.pro100||Math.round(p.pro*f100),
+    carbohidratos:p.carb100||Math.round(p.carb*f100),
+    grasas:p.fat100||Math.round(p.fat*f100),
+    fibra:Math.round((p.fibra||0)*f100),
+    azucar:Math.round((p.azucar||0)*f100),
+    sodio:Math.round((p.sodio||0)*f100),
+    porcionNombre:p.porcionNombre,porcionGramos:p.porcionGramos,
+    calPorcion:p.cal,protPorcion:p.pro,carbPorcion:p.carb,grasPorcion:p.fat,
+    custom:true,useCount:0,lastUsed:'',
+  };
+  if(!lib.find(i=>i.name.toLowerCase()===p.name.toLowerCase())){
+    lib.push(entry);S.setLib(lib);buildDS();
+  }
+  // Also save to barcode dictionary if we have a code
+  const codeEl=document.getElementById('bcInput');
+  const code=((codeEl && codeEl.value)||'').trim();
+  if(code){
+    const barcodes=S.getBarcodes();
+    barcodes[code]={...p,_savedAt:todayStr()};
+    S.setBarcodes(barcodes);
+    renderCustomBarcodes();
+    showToast(`"${p.name}" guardado + codigo ${code} registrado ✓`,'success');
+  }else{
+    showToast(`"${p.name}" guardado en biblioteca`,'success');
+  }
+}
+
+
 function updBC(cal,pro,carb,fat){
-  const g=parseFloat(document.getElementById('bcG')?.value)||0;const f=g/100;
+  const g=parseFloat((document.getElementById('bcG')||{}).value)||0;const f=g/100;
   const el=document.getElementById('bcPrev');
   if(el)el.textContent=`≈ ${Math.round(cal*f)}kcal P:${Math.round(pro*f)}g C:${Math.round(carb*f)}g G:${Math.round(fat*f)}g`;
 }
@@ -1869,32 +2301,36 @@ function renderGoal(){
   const weeksLeft=Math.max(daysLeft/7,0.1);
   let rate=goal.pace==='auto'?Math.min(Math.abs(diff)/weeksLeft,1):parseFloat(goal.pace);
   const dailyD=Math.round(rate*7700/7);
-  const prof=S.getProfile();const tdee=prof?.tdee||0;
+  const prof=S.getProfile();const tdee=(prof && prof.tdee)||0;
   const tCal=tdee>0?(diff>0?tdee-dailyD:tdee+dailyD):0;
   const latest=ws.length?ws[ws.length-1].weight:goal.currentWeight;
   const achieved=Math.abs(goal.currentWeight-latest);
   const total=Math.abs(diff);
   const pct=total>0?Math.min(achieved/total*100,100):0;
-  rw.innerHTML=`
-    <div class="card" style="margin:0 0 10px">
-      <div class="ct">Progreso</div>
-      <div style="text-align:center;padding:6px 0 12px">
-        <div style="font-family:var(--font-head);font-size:28px;font-weight:800;color:var(--accent2)">${latest} kg</div>
-        <div style="font-size:11px;color:var(--text-dim);margin-top:3px">actual · meta: ${goal.targetWeight} kg</div>
-      </div>
-      <div class="gtb"><div class="gtf" style="width:${pct}%"></div></div>
-      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim);margin-bottom:12px">
-        <span>${goal.currentWeight}kg</span><span>${pct.toFixed(0)}%</span><span>${goal.targetWeight}kg</span>
-      </div>
-      <div class="sb">
-        <div class="srow"><span class="sl">Objetivo</span><span class="sv grn">${diff>0?'Perder':'Ganar'} ${Math.abs(diff).toFixed(1)} kg</span></div>
-        <div class="srow"><span class="sl">Ritmo${goal.pace==='auto'?' (auto)':''}</span><span class="sv">${rate.toFixed(2)} kg/semana</span></div>
-        <div class="srow"><span class="sl">${diff>0?'Deficit':'Superavit'} diario</span><span class="sv">${dailyD} kcal</span></div>
-        ${tCal>0?`<div class="srow"><span class="sl">Calorias meta diaria</span><span class="sv acc">${tCal} kcal/dia <span style='font-size:9px;color:var(--accent2)'>✓ sincronizado</span></span></div>`:''}
-        <div class="srow"><span class="sl">Dias restantes</span><span class="sv">${daysLeft} dias</span></div>
-      </div>
-      ${rate>0.75?'<div style="background:rgba(255,165,2,.08);border:1px solid rgba(255,165,2,.3);border-radius:8px;padding:10px;margin-top:10px;font-size:11px;color:var(--warn);line-height:1.5">⚠️ Mas de 0.75 kg/semana puede causar perdida de musculo. Recomendado: 0.5 kg/semana con ejercicio.</div>':''}
-    </div>`;
+  var diffSign=diff>0?'Perder':'Ganar';
+  var warnHtml=rate>0.75?'<div style="background:rgba(255,165,2,.08);border:1px solid rgba(255,165,2,.3);border-radius:8px;padding:10px;margin-top:10px;font-size:11px;color:var(--warn);line-height:1.5">&#9888;&#65039; Mas de 0.75 kg/semana puede causar perdida de musculo. Recomendado: 0.5 kg/semana con ejercicio.</div>':'';
+  var calRow=tCal>0?'<div class="srow"><span class="sl">Calorias meta</span><span class="sv acc">'+tCal+' kcal/dia <span style="font-size:9px;color:var(--accent2)">✓ sincronizado</span></span></div>':'';
+  rw.innerHTML=
+    '<div class="card" style="margin:0 0 10px">'
+    +'<div class="ct">Progreso</div>'
+    +'<div style="text-align:center;padding:6px 0 12px">'
+    +'<div style="font-family:var(--font-head);font-size:28px;font-weight:800;color:var(--accent2)">'+latest+' kg</div>'
+    +'<div style="font-size:11px;color:var(--text-dim);margin-top:3px">actual &middot; meta: '+goal.targetWeight+' kg</div>'
+    +'</div>'
+    +'<div class="gtb"><div class="gtf" style="width:'+pct+'%"></div></div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim);margin-bottom:12px">'
+    +'<span>'+goal.currentWeight+'kg</span><span>'+pct.toFixed(0)+'%</span><span>'+goal.targetWeight+'kg</span>'
+    +'</div>'
+    +'<div class="sb">'
+    +'<div class="srow"><span class="sl">Objetivo</span><span class="sv grn">'+diffSign+' '+Math.abs(diff).toFixed(1)+' kg</span></div>'
+    +'<div class="srow"><span class="sl">Ritmo'+(goal.pace==='auto'?' (auto)':'')+' </span><span class="sv">'+rate.toFixed(2)+' kg/semana</span></div>'
+    +'<div class="srow"><span class="sl">'+(diff>0?'Deficit':'Superavit')+' diario</span><span class="sv">'+dailyD+' kcal</span></div>'
+    +calRow
+    +'<div class="srow"><span class="sl">Dias restantes</span><span class="sv">'+daysLeft+' dias</span></div>'
+    +'</div>'
+    +warnHtml
+    +'</div>';
+  renderWH(ws);
   renderWH(ws);
 }
 function renderWH(ws){
@@ -1917,7 +2353,7 @@ function renderWH(ws){
   // Area fill
   const areaPath=`M${xPos(0).toFixed(1)},${(PT+gH).toFixed(1)}L${pts.join('L')}L${xPos(recent.length-1).toFixed(1)},${(PT+gH).toFixed(1)}Z`;
   // Goal line
-  const goalLine=goal?.targetWeight?`<line x1="${PL}" y1="${yPos(goal.targetWeight).toFixed(1)}" x2="${W-PR}" y2="${yPos(goal.targetWeight).toFixed(1)}" stroke="var(--accent2)" stroke-width="1" stroke-dasharray="4,3" opacity="0.6"/>
+  const goalLine=(goal && goal.targetWeight)?`<line x1="${PL}" y1="${yPos(goal.targetWeight).toFixed(1)}" x2="${W-PR}" y2="${yPos(goal.targetWeight).toFixed(1)}" stroke="var(--accent2)" stroke-width="1" stroke-dasharray="4,3" opacity="0.6"/>
     <text x="${W-PR-2}" y="${(yPos(goal.targetWeight)-3).toFixed(1)}" font-size="8" fill="var(--accent2)" text-anchor="end">${goal.targetWeight}kg</text>`:'' ;
   // Y axis labels
   const yLabels=[minW,minW+range*.5,maxW].map(v=>`<text x="${PL-4}" y="${(yPos(v)+3).toFixed(1)}" font-size="8" fill="var(--text-dim)" text-anchor="end">${v.toFixed(1)}</text>`).join('');
@@ -1953,7 +2389,7 @@ function renderStats(){
     const foods=allF[str]||[];
     days.push({str,cal:foods.reduce((s,f)=>s+(f.calorias||0),0),foods,lbl:['Do','Lu','Ma','Mi','Ju','Vi','Sa'][d.getDay()]});
   }
-  const maxC=Math.max(...days.map(d=>d.cal),prof?.calories||2000,1);
+  const maxC=Math.max(...days.map(d=>d.cal),(prof && prof.calories)||2000,1);
   document.getElementById('wChart').innerHTML=days.map(d=>{
     const pct=Math.min((d.cal/maxC)*100,100);
     return `<div class="wb"><div class="wbo"><div class="wbf${d.str===todayStr()?' today':''}" style="height:${pct}%"></div></div><div class="wdl">${d.lbl}</div></div>`;
@@ -1966,7 +2402,7 @@ function renderStats(){
   document.getElementById('statsB').innerHTML=`
     <div class="sb">
       <div class="srow"><span class="sl">Promedio calorico</span><span class="sv acc">${avg||'--'} kcal</span></div>
-      <div class="srow"><span class="sl">Meta diaria</span><span class="sv">${prof?.calories||'--'} kcal</span></div>
+      <div class="srow"><span class="sl">Meta diaria</span><span class="sv">${(prof && prof.calories) || '--'} kcal</span></div>
       <div class="srow"><span class="sl">Proteinas prom.</span><span class="sv grn">${Math.round(totP/7)}g/dia</span></div>
       <div class="srow"><span class="sl">Carbos prom.</span><span class="sv" style="color:var(--carb-col)">${Math.round(totC/7)}g/dia</span></div>
       <div class="srow"><span class="sl">Grasas prom.</span><span class="sv" style="color:var(--fat-col)">${Math.round(totF/7)}g/dia</span></div>
@@ -2026,14 +2462,14 @@ async function testKey(){
       body:JSON.stringify({model:GROQ_TEXT_MODEL,messages:[{role:'user',content:'Di solo: OK'}],max_tokens:5})
     });
     const data=await res.json();
-    const txt=data?.choices?.[0]?.message?.content||'';
+    const txt=(data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
     if(res.ok&&txt.trim().length>0){
       S.setKey(key);
       el.style.color='var(--accent2)';
       el.innerHTML='✅ <b>¡Groq funciona perfectamente!</b><br>Modelo: '+GROQ_TEXT_MODEL+'<br>Fotos: '+GROQ_VISION_MODEL+'<br>14,400 requests/dia gratis. Guarda los ajustes.';
       showToast('¡Groq Key valida! ✓','success');
     }else{
-      const msg=data?.error?.message||JSON.stringify(data).slice(0,120);
+      const msg=((data && data.error && data.error.message)||JSON.stringify(data).slice(0,120));
       el.style.color='var(--danger)';
       el.innerHTML='❌ <b>Error: '+esc(msg)+'</b><br>Crea una key nueva en <a href="https://console.groq.com" target="_blank" style="color:var(--accent2)">console.groq.com</a>';
     }
@@ -2253,7 +2689,7 @@ function renderCalendar() {
     const dateStr = `${calYear}-${p2(calMonth+1)}-${p2(d)}`;
     const foods   = allFoods[dateStr] || [];
     const cal     = foods.reduce((s, f) => s + (f.calorias||0), 0);
-    const goal    = profile?.calories || 0;
+    const goal    = (profile && profile.calories) || 0;
     const isToday = dateStr === today;
     const isFuture = dateStr > today;
     const hasGym  = gym[dateStr];
@@ -2274,7 +2710,7 @@ function renderCalendar() {
       ? `<div class="cal-dot" style="background:${cal<=goal?'var(--accent2)':cal<=goal*1.1?'var(--warn)':'var(--danger)'}"></div>`
       : '<div class="cal-dot"></div>';
 
-    html += `<div class="${cls}" onclick="${isFuture ? '' : `toggleGym('${dateStr}')`}">
+    html += `<div class="${cls}" onclick=""+(isFuture?'':"toggleGym('"+dateStr+"')")+ "">
       <div class="cal-dn">${d}</div>
       ${gymBadge}
     </div>`;
